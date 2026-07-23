@@ -1,1 +1,0 @@
-# OBJ exporter placeholder

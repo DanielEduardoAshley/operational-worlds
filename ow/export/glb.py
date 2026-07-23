@@ -1,1 +1,0 @@
-# GLB exporter placeholder
