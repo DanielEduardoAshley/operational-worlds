@@ -1,4 +1,5 @@
 # Changelog
 
-## 0.1.0
-- Initial scaffold.
+## 0.1.1
+- Reorganized architecture.
+- Added Tile, Primitive and World classes.
