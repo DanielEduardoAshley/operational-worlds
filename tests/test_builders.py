@@ -62,3 +62,37 @@ def test_mesh_reaches_expected_total_height() -> None:
     maximum_z = max(vertex[2] for vertex in mesh.vertices)
 
     assert maximum_z == pytest.approx(13.0)
+
+
+def test_hexagon_has_horizontal_top_and_bottom_edges() -> None:
+    parameters = TileParameters(
+        shape=ShapeType.HEXAGON,
+        shape_width_mm=60.0,
+    )
+
+    points = shape_outline(parameters)
+
+    highest_y = max(y for _, y in points)
+    lowest_y = min(y for _, y in points)
+
+    top_points = [
+        point
+        for point in points
+        if point[1] == pytest.approx(highest_y)
+    ]
+
+    bottom_points = [
+        point
+        for point in points
+        if point[1] == pytest.approx(lowest_y)
+    ]
+
+    assert len(top_points) == 2
+    assert len(bottom_points) == 2
+
+    assert top_points[0][1] == pytest.approx(
+        top_points[1][1]
+    )
+    assert bottom_points[0][1] == pytest.approx(
+        bottom_points[1][1]
+    )

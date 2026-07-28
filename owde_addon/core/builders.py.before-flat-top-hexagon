@@ -72,7 +72,7 @@ def shape_outline(parameters: TileParameters) -> tuple[Point2D, ...]:
         return regular_polygon_points(
             sides=6,
             diameter_mm=parameters.shape_width_mm,
-            rotation_degrees=0.0,
+            rotation_degrees=30.0,
         )
 
     raise ValueError(f"Unsupported shape: {parameters.shape}")
