@@ -1,24 +1,33 @@
-# Operational Worlds Design Engine (OWDE)
+# Operational Worlds Design Engine
 
-Version 0.1.1
+Current target:
 
-## Philosophy
+```text
+0.2.0-alpha.1
+```
 
-Operational meaning is independent of geometry.
+## Development
 
-Core Concepts
+Install test dependencies:
 
-- Tile
-- Primitive
-- World
+```sh
+python3 -m pip install -r requirements-dev.txt
+```
 
-Renderers and exporters are interchangeable backends.
+Run tests:
 
-## Roadmap
+```sh
+python3 -m pytest
+```
 
-- Tile Engine
-- Primitive Engine
-- Blender Renderer
-- Research Metadata
-- Assemblies
-- Simulation
+Build the Blender add-on zip:
+
+```sh
+python3 scripts/build_addon.py
+```
+
+The build artifact will be written to:
+
+```text
+dist/owde-0.2.0-alpha.1.zip
+```
