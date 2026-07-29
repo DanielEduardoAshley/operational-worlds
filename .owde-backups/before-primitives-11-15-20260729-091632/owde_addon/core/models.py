@@ -16,11 +16,6 @@ class ShapeType(str, Enum):
     APERTURE = "APERTURE"
     LENS = "LENS"
     MIRROR = "MIRROR"
-    LIGHT_SOURCE = "LIGHT_SOURCE"
-    WEIGHT = "WEIGHT"
-    THRESHOLD = "THRESHOLD"
-    SENSOR = "SENSOR"
-    HANDLE = "HANDLE"
 
 
 @dataclass(frozen=True, slots=True)

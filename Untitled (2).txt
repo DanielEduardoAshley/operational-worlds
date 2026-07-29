@@ -1,0 +1,1238 @@
+python3 <<'PY'
+from __future__ import annotations
+
+from datetime import datetime
+from pathlib import Path
+import re
+import shutil
+
+
+FILES = [
+    Path("owde_addon/core/models.py"),
+    Path("owde_addon/core/builders.py"),
+    Path("owde_addon/blender/properties.py"),
+    Path("owde_addon/blender/operators.py"),
+    Path("owde_addon/blender/panel.py"),
+    Path("tests/test_builders.py"),
+]
+
+missing = [path for path in FILES if not path.exists()]
+
+if missing:
+    raise SystemExit(
+        "Run this command from the operational-worlds repository root.\n"
+        "Missing required files:\n"
+        + "\n".join(f"  - {path}" for path in missing)
+    )
+
+timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+
+backup_root = (
+    Path(".owde-backups")
+    / f"before-primitives-11-15-{timestamp}"
+)
+
+for source in FILES:
+    destination = backup_root / source
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(source, destination)
+
+print(f"Backup created at: {backup_root}")
+
+
+def read(path: Path) -> str:
+    return path.read_text(encoding="utf-8")
+
+
+def write(path: Path, text: str) -> None:
+    path.write_text(text, encoding="utf-8")
+
+
+def replace_once(
+    path: Path,
+    old: str,
+    new: str,
+    label: str,
+) -> None:
+    text = read(path)
+
+    if old not in text:
+        raise SystemExit(
+            f"Could not patch {label} in {path}.\n"
+            f"Restore from: {backup_root}"
+        )
+
+    write(
+        path,
+        text.replace(old, new, 1),
+    )
+
+
+# =====================================================================
+# 1. Extend ShapeType with OW11-OW15.
+# =====================================================================
+
+models_path = Path("owde_addon/core/models.py")
+models = read(models_path)
+
+if 'LIGHT_SOURCE = "LIGHT_SOURCE"' not in models:
+    marker = '''    MIRROR = "MIRROR"
+'''
+
+    replacement = '''    MIRROR = "MIRROR"
+    LIGHT_SOURCE = "LIGHT_SOURCE"
+    WEIGHT = "WEIGHT"
+    THRESHOLD = "THRESHOLD"
+    SENSOR = "SENSOR"
+    HANDLE = "HANDLE"
+'''
+
+    if marker not in models:
+        raise SystemExit(
+            "Could not find ShapeType.MIRROR in models.py."
+        )
+
+    models = models.replace(
+        marker,
+        replacement,
+        1,
+    )
+
+write(models_path, models)
+
+
+# =====================================================================
+# 2. Add core geometry builders for OW11-OW15.
+# =====================================================================
+
+builders_path = Path("owde_addon/core/builders.py")
+builders = read(builders_path)
+
+new_builders = r'''
+
+def build_light_source_mesh(
+    parameters: TileParameters,
+) -> MeshData:
+    """Build a raised lamp housing with a central light surface."""
+
+    base = square_tile_base(parameters)
+
+    outer_radius = parameters.shape_width_mm / 2.0
+    housing_height = max(
+        2.0,
+        parameters.shape_height_mm * 0.65,
+    )
+
+    housing = transform_mesh(
+        cylinder_mesh(
+            radius_mm=outer_radius,
+            length_mm=housing_height,
+            segments=parameters.circle_segments,
+            axis="Z",
+        ),
+        translate_z_mm=parameters.tile_height_mm,
+    )
+
+    light_radius = outer_radius * 0.76
+    light_height = max(
+        0.8,
+        parameters.shape_height_mm * 0.18,
+    )
+
+    light_surface = transform_mesh(
+        cylinder_mesh(
+            radius_mm=light_radius,
+            length_mm=light_height,
+            segments=parameters.circle_segments,
+            axis="Z",
+        ),
+        translate_z_mm=(
+            parameters.tile_height_mm
+            + housing_height
+        ),
+    )
+
+    return combine_meshes(
+        base,
+        housing,
+        light_surface,
+    )
+
+
+def build_weight_mesh(
+    parameters: TileParameters,
+) -> MeshData:
+    """Build a dense cylindrical mass with a raised central boss."""
+
+    base = square_tile_base(parameters)
+
+    outer_radius = parameters.shape_width_mm / 2.0
+    body_height = max(
+        3.0,
+        parameters.shape_height_mm,
+    )
+
+    body = transform_mesh(
+        cylinder_mesh(
+            radius_mm=outer_radius,
+            length_mm=body_height,
+            segments=parameters.circle_segments,
+            axis="Z",
+        ),
+        translate_z_mm=parameters.tile_height_mm,
+    )
+
+    shoulder_radius = outer_radius * 0.78
+    shoulder_height = max(
+        1.0,
+        body_height * 0.22,
+    )
+
+    shoulder = transform_mesh(
+        cylinder_mesh(
+            radius_mm=shoulder_radius,
+            length_mm=shoulder_height,
+            segments=parameters.circle_segments,
+            axis="Z",
+        ),
+        translate_z_mm=(
+            parameters.tile_height_mm
+            + body_height
+        ),
+    )
+
+    boss_radius = outer_radius * 0.28
+    boss_height = max(
+        1.5,
+        body_height * 0.38,
+    )
+
+    boss = transform_mesh(
+        cylinder_mesh(
+            radius_mm=boss_radius,
+            length_mm=boss_height,
+            segments=parameters.circle_segments,
+            axis="Z",
+        ),
+        translate_z_mm=(
+            parameters.tile_height_mm
+            + body_height
+            + shoulder_height
+        ),
+    )
+
+    return combine_meshes(
+        base,
+        body,
+        shoulder,
+        boss,
+    )
+
+
+def build_threshold_mesh(
+    parameters: TileParameters,
+) -> MeshData:
+    """Build a raised boundary extending across the tile."""
+
+    base = square_tile_base(parameters)
+
+    threshold_length = min(
+        parameters.shape_width_mm,
+        parameters.tile_width_mm * 0.86,
+    )
+
+    threshold_depth = max(
+        5.0,
+        min(
+            parameters.shape_height_mm * 2.0,
+            parameters.tile_depth_mm * 0.22,
+        ),
+    )
+
+    threshold_height = max(
+        2.0,
+        parameters.shape_height_mm,
+    )
+
+    threshold = transform_mesh(
+        rectangular_prism(
+            width_mm=threshold_length,
+            depth_mm=threshold_depth,
+            height_mm=threshold_height,
+        ),
+        translate_z_mm=parameters.tile_height_mm,
+    )
+
+    approach_depth = threshold_depth * 0.42
+    approach_height = max(
+        0.8,
+        threshold_height * 0.22,
+    )
+
+    front_approach = transform_mesh(
+        rectangular_prism(
+            width_mm=threshold_length,
+            depth_mm=approach_depth,
+            height_mm=approach_height,
+        ),
+        translate_y_mm=-(
+            threshold_depth / 2.0
+            + approach_depth / 2.0
+        ),
+        translate_z_mm=parameters.tile_height_mm,
+    )
+
+    rear_approach = transform_mesh(
+        rectangular_prism(
+            width_mm=threshold_length,
+            depth_mm=approach_depth,
+            height_mm=approach_height,
+        ),
+        translate_y_mm=(
+            threshold_depth / 2.0
+            + approach_depth / 2.0
+        ),
+        translate_z_mm=parameters.tile_height_mm,
+    )
+
+    return combine_meshes(
+        base,
+        front_approach,
+        threshold,
+        rear_approach,
+    )
+
+
+def build_sensor_mesh(
+    parameters: TileParameters,
+) -> MeshData:
+    """Build a sensing platform with a recessed central detector."""
+
+    base = square_tile_base(parameters)
+
+    outer_radius = parameters.shape_width_mm / 2.0
+    platform_height = max(
+        1.8,
+        parameters.shape_height_mm * 0.45,
+    )
+
+    platform = transform_mesh(
+        cylinder_mesh(
+            radius_mm=outer_radius,
+            length_mm=platform_height,
+            segments=parameters.circle_segments,
+            axis="Z",
+        ),
+        translate_z_mm=parameters.tile_height_mm,
+    )
+
+    detector_radius = outer_radius * 0.64
+    detector_height = max(
+        0.7,
+        parameters.shape_height_mm * 0.14,
+    )
+
+    detector = transform_mesh(
+        cylinder_mesh(
+            radius_mm=detector_radius,
+            length_mm=detector_height,
+            segments=parameters.circle_segments,
+            axis="Z",
+        ),
+        translate_z_mm=(
+            parameters.tile_height_mm
+            + platform_height
+        ),
+    )
+
+    indicator_radius = outer_radius * 0.10
+    indicator_height = max(
+        0.8,
+        detector_height * 1.25,
+    )
+
+    indicator = transform_mesh(
+        cylinder_mesh(
+            radius_mm=indicator_radius,
+            length_mm=indicator_height,
+            segments=parameters.circle_segments,
+            axis="Z",
+        ),
+        translate_y_mm=outer_radius * 0.72,
+        translate_z_mm=(
+            parameters.tile_height_mm
+            + platform_height
+        ),
+    )
+
+    return combine_meshes(
+        base,
+        platform,
+        detector,
+        indicator,
+    )
+
+
+def build_handle_mesh(
+    parameters: TileParameters,
+) -> MeshData:
+    """Build an elevated bridge handle supported at both ends."""
+
+    base = square_tile_base(parameters)
+
+    handle_span = parameters.shape_width_mm
+
+    post_width = max(
+        4.0,
+        min(
+            parameters.shape_height_mm,
+            handle_span * 0.14,
+        ),
+    )
+
+    post_depth = max(
+        5.0,
+        post_width * 1.25,
+    )
+
+    post_height = max(
+        12.0,
+        parameters.shape_height_mm * 3.0,
+    )
+
+    support_offset = (
+        handle_span / 2.0
+        - post_width / 2.0
+    )
+
+    left_post = transform_mesh(
+        rectangular_prism(
+            width_mm=post_width,
+            depth_mm=post_depth,
+            height_mm=post_height,
+        ),
+        translate_x_mm=-support_offset,
+        translate_z_mm=parameters.tile_height_mm,
+    )
+
+    right_post = transform_mesh(
+        rectangular_prism(
+            width_mm=post_width,
+            depth_mm=post_depth,
+            height_mm=post_height,
+        ),
+        translate_x_mm=support_offset,
+        translate_z_mm=parameters.tile_height_mm,
+    )
+
+    grip_width = handle_span
+    grip_depth = post_depth
+    grip_height = max(
+        4.0,
+        post_width,
+    )
+
+    grip = transform_mesh(
+        rectangular_prism(
+            width_mm=grip_width,
+            depth_mm=grip_depth,
+            height_mm=grip_height,
+        ),
+        translate_z_mm=(
+            parameters.tile_height_mm
+            + post_height
+        ),
+    )
+
+    left_foot = transform_mesh(
+        cylinder_mesh(
+            radius_mm=post_depth * 0.72,
+            length_mm=max(1.5, post_width * 0.34),
+            segments=parameters.circle_segments,
+            axis="Z",
+        ),
+        translate_x_mm=-support_offset,
+        translate_z_mm=parameters.tile_height_mm,
+    )
+
+    right_foot = transform_mesh(
+        cylinder_mesh(
+            radius_mm=post_depth * 0.72,
+            length_mm=max(1.5, post_width * 0.34),
+            segments=parameters.circle_segments,
+            axis="Z",
+        ),
+        translate_x_mm=support_offset,
+        translate_z_mm=parameters.tile_height_mm,
+    )
+
+    return combine_meshes(
+        base,
+        left_foot,
+        right_foot,
+        left_post,
+        right_post,
+        grip,
+    )
+'''
+
+if "def build_light_source_mesh(" not in builders:
+    marker = "\ndef build_tile_mesh(\n"
+
+    if marker not in builders:
+        raise SystemExit(
+            "Could not find build_tile_mesh in builders.py."
+        )
+
+    builders = builders.replace(
+        marker,
+        new_builders + marker,
+        1,
+    )
+
+write(builders_path, builders)
+
+
+# =====================================================================
+# 3. Add OW11-OW15 dispatch branches.
+# =====================================================================
+
+builders = read(builders_path)
+
+if "ShapeType.LIGHT_SOURCE" not in builders:
+    marker = '''    if parameters.shape is ShapeType.MIRROR:
+        return build_mirror_mesh(parameters)
+
+    raise ValueError(
+'''
+
+    replacement = '''    if parameters.shape is ShapeType.MIRROR:
+        return build_mirror_mesh(parameters)
+
+    if parameters.shape is ShapeType.LIGHT_SOURCE:
+        return build_light_source_mesh(parameters)
+
+    if parameters.shape is ShapeType.WEIGHT:
+        return build_weight_mesh(parameters)
+
+    if parameters.shape is ShapeType.THRESHOLD:
+        return build_threshold_mesh(parameters)
+
+    if parameters.shape is ShapeType.SENSOR:
+        return build_sensor_mesh(parameters)
+
+    if parameters.shape is ShapeType.HANDLE:
+        return build_handle_mesh(parameters)
+
+    raise ValueError(
+'''
+
+    if marker not in builders:
+        raise SystemExit(
+            "Could not find the Mirror dispatch branch."
+        )
+
+    builders = builders.replace(
+        marker,
+        replacement,
+        1,
+    )
+
+write(builders_path, builders)
+
+
+# =====================================================================
+# 4. Add the five primitives to Blender's selector.
+# =====================================================================
+
+properties_path = Path("owde_addon/blender/properties.py")
+properties = read(properties_path)
+
+new_property_items = '''            (
+                "LIGHT_SOURCE",
+                "11 Light Source",
+                "Introduces illumination, signaling, and visibility",
+            ),
+            (
+                "WEIGHT",
+                "12 Weight",
+                "Introduces mass, resistance, and downward force",
+            ),
+            (
+                "THRESHOLD",
+                "13 Threshold",
+                "Marks a boundary or transition between regions",
+            ),
+            (
+                "SENSOR",
+                "14 Sensor",
+                "Detects presence, change, or environmental conditions",
+            ),
+            (
+                "HANDLE",
+                "15 Handle",
+                "Provides a graspable interface for manipulation",
+            ),
+'''
+
+if '"11 Light Source"' not in properties:
+    mirror_item = '''            (
+                "MIRROR",
+                "10 Mirror",
+                "Reflects and creates virtual depth",
+            ),
+'''
+
+    if mirror_item not in properties:
+        raise SystemExit(
+            "Could not find the Mirror selector item."
+        )
+
+    properties = properties.replace(
+        mirror_item,
+        mirror_item + new_property_items,
+        1,
+    )
+
+write(properties_path, properties)
+
+
+# =====================================================================
+# 5. Expand gallery and primitive metadata.
+# =====================================================================
+
+operators_path = Path("owde_addon/blender/operators.py")
+operators = read(operators_path)
+
+operators = operators.replace(
+    'OWDE_VERSION = "0.3.0-alpha.2"',
+    'OWDE_VERSION = "0.4.0-alpha.1"',
+)
+
+if "    ShapeType.LIGHT_SOURCE,\n" not in operators:
+    gallery_marker = '''    ShapeType.MIRROR,
+)
+'''
+
+    gallery_replacement = '''    ShapeType.MIRROR,
+    ShapeType.LIGHT_SOURCE,
+    ShapeType.WEIGHT,
+    ShapeType.THRESHOLD,
+    ShapeType.SENSOR,
+    ShapeType.HANDLE,
+)
+'''
+
+    if gallery_marker not in operators:
+        raise SystemExit(
+            "Could not find the gallery ShapeType list."
+        )
+
+    operators = operators.replace(
+        gallery_marker,
+        gallery_replacement,
+        1,
+    )
+
+new_definitions = '''    ShapeType.LIGHT_SOURCE: {
+        "id": "PRIM-0011",
+        "name": "Light Source",
+        "description": (
+            "An emitting surface introducing illumination, "
+            "visibility, and signaling."
+        ),
+        "capabilities": (
+            "Illuminate",
+            "Signal",
+            "Reveal",
+            "Attract",
+            "Orient",
+        ),
+    },
+    ShapeType.WEIGHT: {
+        "id": "PRIM-0012",
+        "name": "Weight",
+        "description": (
+            "A concentrated mass introducing resistance, "
+            "stability, and downward force."
+        ),
+        "capabilities": (
+            "Weigh",
+            "Anchor",
+            "Resist",
+            "Stabilize",
+            "Press",
+        ),
+    },
+    ShapeType.THRESHOLD: {
+        "id": "PRIM-0013",
+        "name": "Threshold",
+        "description": (
+            "A raised boundary marking transition between "
+            "regions, conditions, or states."
+        ),
+        "capabilities": (
+            "Separate",
+            "Transition",
+            "Mark",
+            "Cross",
+            "Regulate",
+        ),
+    },
+    ShapeType.SENSOR: {
+        "id": "PRIM-0014",
+        "name": "Sensor",
+        "description": (
+            "A detecting surface that registers presence, "
+            "change, proximity, or environmental conditions."
+        ),
+        "capabilities": (
+            "Detect",
+            "Measure",
+            "Register",
+            "Trigger",
+            "Respond",
+        ),
+    },
+    ShapeType.HANDLE: {
+        "id": "PRIM-0015",
+        "name": "Handle",
+        "description": (
+            "A graspable interface enabling lifting, pulling, "
+            "carrying, or direct manipulation."
+        ),
+        "capabilities": (
+            "Grasp",
+            "Lift",
+            "Pull",
+            "Carry",
+            "Manipulate",
+        ),
+    },
+'''
+
+if '"PRIM-0011"' not in operators:
+    marker = '''    ShapeType.MIRROR: {
+'''
+
+    start = operators.find(marker)
+
+    if start == -1:
+        raise SystemExit(
+            "Could not find the Mirror primitive definition."
+        )
+
+    next_section = operators.find(
+        "\n}\n\n\ndef parameters_from_settings",
+        start,
+    )
+
+    if next_section == -1:
+        raise SystemExit(
+            "Could not locate the end of PRIMITIVE_DEFINITIONS."
+        )
+
+    operators = (
+        operators[:next_section]
+        + "\n"
+        + new_definitions
+        + operators[next_section:]
+    )
+
+write(operators_path, operators)
+
+
+# =====================================================================
+# 6. Add emissive and sensor Blender materials.
+# =====================================================================
+
+operators = read(operators_path)
+
+material_helpers = r'''
+
+def get_or_create_light_material() -> bpy.types.Material:
+    material_name = "OWDE Emissive Light"
+    material = bpy.data.materials.get(material_name)
+
+    if material is None:
+        material = bpy.data.materials.new(material_name)
+        material.use_nodes = True
+
+        material.diffuse_color = (
+            1.0,
+            0.82,
+            0.32,
+            1.0,
+        )
+
+        principled = material.node_tree.nodes.get(
+            "Principled BSDF"
+        )
+
+        if principled is not None:
+            principled.inputs["Base Color"].default_value = (
+                1.0,
+                0.72,
+                0.18,
+                1.0,
+            )
+
+            emission_input = principled.inputs.get(
+                "Emission Color"
+            )
+
+            if emission_input is None:
+                emission_input = principled.inputs.get(
+                    "Emission"
+                )
+
+            if emission_input is not None:
+                emission_input.default_value = (
+                    1.0,
+                    0.42,
+                    0.05,
+                    1.0,
+                )
+
+            strength_input = principled.inputs.get(
+                "Emission Strength"
+            )
+
+            if strength_input is not None:
+                strength_input.default_value = 4.0
+
+            principled.inputs["Roughness"].default_value = 0.26
+
+    return material
+
+
+def create_light_source_insert(
+    parent_object: bpy.types.Object,
+    parameters: TileParameters,
+) -> bpy.types.Object:
+    radius_m = (
+        parameters.shape_width_mm
+        * 0.36
+        * MM_TO_METERS
+    )
+
+    housing_height_mm = max(
+        2.0,
+        parameters.shape_height_mm * 0.65,
+    )
+
+    insert_height_mm = max(
+        0.35,
+        parameters.shape_height_mm * 0.08,
+    )
+
+    bpy.ops.mesh.primitive_cylinder_add(
+        vertices=parameters.circle_segments,
+        radius=radius_m,
+        depth=insert_height_mm * MM_TO_METERS,
+        location=(
+            parent_object.location.x,
+            parent_object.location.y,
+            parent_object.location.z
+            + (
+                parameters.tile_height_mm
+                + housing_height_mm
+                + insert_height_mm
+            )
+            * MM_TO_METERS,
+        ),
+    )
+
+    insert = bpy.context.active_object
+    insert.name = "PRIM-0011_Emissive_Insert"
+
+    insert.data.materials.append(
+        get_or_create_light_material()
+    )
+
+    insert["owde_visual_detail"] = True
+    insert["owde_detail_type"] = "emissive_light_surface"
+
+    insert.parent = parent_object
+    insert.matrix_parent_inverse = (
+        parent_object.matrix_world.inverted()
+    )
+
+    return insert
+
+
+def create_sensor_insert(
+    parent_object: bpy.types.Object,
+    parameters: TileParameters,
+) -> bpy.types.Object:
+    radius_m = (
+        parameters.shape_width_mm
+        * 0.31
+        * MM_TO_METERS
+    )
+
+    platform_height_mm = max(
+        1.8,
+        parameters.shape_height_mm * 0.45,
+    )
+
+    insert_height_mm = max(
+        0.32,
+        parameters.shape_height_mm * 0.07,
+    )
+
+    bpy.ops.mesh.primitive_cylinder_add(
+        vertices=parameters.circle_segments,
+        radius=radius_m,
+        depth=insert_height_mm * MM_TO_METERS,
+        location=(
+            parent_object.location.x,
+            parent_object.location.y,
+            parent_object.location.z
+            + (
+                parameters.tile_height_mm
+                + platform_height_mm
+                + insert_height_mm
+            )
+            * MM_TO_METERS,
+        ),
+    )
+
+    insert = bpy.context.active_object
+    insert.name = "PRIM-0014_Sensor_Surface"
+
+    insert.data.materials.append(
+        get_or_create_dark_insert_material()
+    )
+
+    insert["owde_visual_detail"] = True
+    insert["owde_detail_type"] = "dark_sensor_surface"
+
+    insert.parent = parent_object
+    insert.matrix_parent_inverse = (
+        parent_object.matrix_world.inverted()
+    )
+
+    return insert
+'''
+
+if "def get_or_create_light_material(" not in operators:
+    marker = "\ndef create_primitive_visual_details(\n"
+
+    if marker not in operators:
+        raise SystemExit(
+            "Could not find create_primitive_visual_details."
+        )
+
+    operators = operators.replace(
+        marker,
+        material_helpers + marker,
+        1,
+    )
+
+visual_pattern = re.compile(
+    r'''def create_primitive_visual_details\(
+        object_: bpy\.types\.Object,
+        parameters: TileParameters,
+    \) -> None:
+.*?
+(?=\n\nclass OWDE_OT_create_tile)
+''',
+    re.VERBOSE | re.DOTALL,
+)
+
+visual_replacement = '''def create_primitive_visual_details(
+    object_: bpy.types.Object,
+    parameters: TileParameters,
+) -> None:
+    if parameters.shape is ShapeType.APERTURE:
+        create_dark_circular_insert(
+            object_,
+            parameters,
+        )
+
+    if parameters.shape is ShapeType.SLOT:
+        create_dark_slot_insert(
+            object_,
+            parameters,
+        )
+
+    if parameters.shape is ShapeType.LIGHT_SOURCE:
+        create_light_source_insert(
+            object_,
+            parameters,
+        )
+
+    if parameters.shape is ShapeType.SENSOR:
+        create_sensor_insert(
+            object_,
+            parameters,
+        )
+'''
+
+operators, count = visual_pattern.subn(
+    visual_replacement,
+    operators,
+    count=1,
+)
+
+if count != 1:
+    raise SystemExit(
+        "Could not update create_primitive_visual_details."
+    )
+
+write(operators_path, operators)
+
+
+# =====================================================================
+# 7. Change gallery from 3 columns to 5 columns.
+# =====================================================================
+
+operators = read(operators_path)
+
+operators = operators.replace(
+    "        column_count = 3",
+    "        column_count = 5",
+    1,
+)
+
+write(operators_path, operators)
+
+
+# =====================================================================
+# 8. Update panel labels and circular primitive controls.
+# =====================================================================
+
+panel_path = Path("owde_addon/blender/panel.py")
+panel = read(panel_path)
+
+for primitive in (
+    '"LIGHT_SOURCE"',
+    '"WEIGHT"',
+    '"SENSOR"',
+):
+    if primitive not in panel.split("}", 1)[0]:
+        panel = panel.replace(
+            '''    "LENS",
+}''',
+            f'''    "LENS",
+    {primitive},
+}}''',
+            1,
+        )
+
+panel = panel.replace(
+    'text="OW01-OW10"',
+    'text="OW01-OW15"',
+)
+
+write(panel_path, panel)
+
+
+# =====================================================================
+# 9. Extend tests to all fifteen primitives.
+# =====================================================================
+
+tests_path = Path("tests/test_builders.py")
+tests = read(tests_path)
+
+if "ShapeType.LIGHT_SOURCE," not in tests:
+    marker = '''    ShapeType.MIRROR,
+)
+'''
+
+    replacement = '''    ShapeType.MIRROR,
+    ShapeType.LIGHT_SOURCE,
+    ShapeType.WEIGHT,
+    ShapeType.THRESHOLD,
+    ShapeType.SENSOR,
+    ShapeType.HANDLE,
+)
+'''
+
+    if marker not in tests:
+        raise SystemExit(
+            "Could not find COMPLEX_PRIMITIVES in tests."
+        )
+
+    tests = tests.replace(
+        marker,
+        replacement,
+        1,
+    )
+
+new_tests = r'''
+
+
+@pytest.mark.parametrize(
+    "shape",
+    (
+        ShapeType.LIGHT_SOURCE,
+        ShapeType.WEIGHT,
+        ShapeType.THRESHOLD,
+        ShapeType.SENSOR,
+        ShapeType.HANDLE,
+    ),
+)
+def test_primitives_11_through_15_extend_above_tile(
+    shape: ShapeType,
+) -> None:
+    parameters = TileParameters(
+        shape=shape,
+        tile_height_mm=8.0,
+        shape_width_mm=55.0,
+        shape_height_mm=5.0,
+    )
+
+    mesh = build_tile_mesh(parameters)
+
+    maximum_z = max(
+        vertex[2]
+        for vertex in mesh.vertices
+    )
+
+    assert maximum_z > parameters.tile_height_mm
+
+
+def test_threshold_spans_majority_of_feature_width() -> None:
+    parameters = TileParameters(
+        shape=ShapeType.THRESHOLD,
+        shape_width_mm=70.0,
+        shape_height_mm=5.0,
+    )
+
+    mesh = build_tile_mesh(parameters)
+
+    feature_vertices = [
+        vertex
+        for vertex in mesh.vertices
+        if vertex[2] > parameters.tile_height_mm
+    ]
+
+    minimum_x = min(
+        vertex[0]
+        for vertex in feature_vertices
+    )
+
+    maximum_x = max(
+        vertex[0]
+        for vertex in feature_vertices
+    )
+
+    assert maximum_x - minimum_x == pytest.approx(
+        70.0
+    )
+
+
+def test_handle_creates_clearance_above_tile() -> None:
+    parameters = TileParameters(
+        shape=ShapeType.HANDLE,
+        tile_height_mm=8.0,
+        shape_width_mm=55.0,
+        shape_height_mm=5.0,
+    )
+
+    mesh = build_tile_mesh(parameters)
+
+    maximum_z = max(
+        vertex[2]
+        for vertex in mesh.vertices
+    )
+
+    expected_minimum = (
+        parameters.tile_height_mm
+        + 12.0
+    )
+
+    assert maximum_z > expected_minimum
+
+
+def test_weight_has_multiple_elevation_levels() -> None:
+    parameters = TileParameters(
+        shape=ShapeType.WEIGHT,
+        tile_height_mm=8.0,
+        shape_width_mm=55.0,
+        shape_height_mm=5.0,
+    )
+
+    mesh = build_tile_mesh(parameters)
+
+    elevations = {
+        round(vertex[2], 4)
+        for vertex in mesh.vertices
+        if vertex[2] >= parameters.tile_height_mm
+    }
+
+    assert len(elevations) >= 4
+
+
+def test_light_source_has_central_top_surface() -> None:
+    parameters = TileParameters(
+        shape=ShapeType.LIGHT_SOURCE,
+        tile_height_mm=8.0,
+        shape_width_mm=55.0,
+        shape_height_mm=5.0,
+    )
+
+    mesh = build_tile_mesh(parameters)
+
+    maximum_z = max(
+        vertex[2]
+        for vertex in mesh.vertices
+    )
+
+    top_vertices = [
+        vertex
+        for vertex in mesh.vertices
+        if vertex[2] == pytest.approx(maximum_z)
+    ]
+
+    assert len(top_vertices) >= parameters.circle_segments
+
+
+def test_all_fifteen_shape_types_are_defined() -> None:
+    expected_shapes = {
+        ShapeType.CIRCLE,
+        ShapeType.TRIANGLE,
+        ShapeType.SQUARE,
+        ShapeType.HEXAGON,
+        ShapeType.SLOT,
+        ShapeType.HINGE,
+        ShapeType.FOLD,
+        ShapeType.APERTURE,
+        ShapeType.LENS,
+        ShapeType.MIRROR,
+        ShapeType.LIGHT_SOURCE,
+        ShapeType.WEIGHT,
+        ShapeType.THRESHOLD,
+        ShapeType.SENSOR,
+        ShapeType.HANDLE,
+    }
+
+    assert set(ShapeType) == expected_shapes
+'''
+
+if "def test_all_fifteen_shape_types_are_defined" not in tests:
+    tests += new_tests
+
+write(tests_path, tests)
+
+print()
+print("Implemented OW11-OW15:")
+print("  PRIM-0011 Light Source")
+print("  PRIM-0012 Weight")
+print("  PRIM-0013 Threshold")
+print("  PRIM-0014 Sensor")
+print("  PRIM-0015 Handle")
+print()
+print("Preserved:")
+print("  OW01-OW10")
+print("  Primitive Gallery")
+print("  Primitive Inspector")
+print("  Flat-top hexagon orientation")
+print("  Dark Slot and Aperture inserts")
+print("  Droplet-style Lens")
+PY
+
+python3 -m pytest
+python3 scripts/build_addon.py

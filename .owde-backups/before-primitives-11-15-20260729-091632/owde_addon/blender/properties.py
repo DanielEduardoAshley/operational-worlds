@@ -56,31 +56,6 @@ class OWDE_PG_settings(bpy.types.PropertyGroup):
                 "10 Mirror",
                 "Reflects and creates virtual depth",
             ),
-            (
-                "LIGHT_SOURCE",
-                "11 Light Source",
-                "Introduces illumination, signaling, and visibility",
-            ),
-            (
-                "WEIGHT",
-                "12 Weight",
-                "Introduces mass, resistance, and downward force",
-            ),
-            (
-                "THRESHOLD",
-                "13 Threshold",
-                "Marks a boundary or transition between regions",
-            ),
-            (
-                "SENSOR",
-                "14 Sensor",
-                "Detects presence, change, or environmental conditions",
-            ),
-            (
-                "HANDLE",
-                "15 Handle",
-                "Provides a graspable interface for manipulation",
-            ),
         ),
         default="CIRCLE",
     )

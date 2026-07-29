@@ -8,7 +8,7 @@ from .adapter import create_blender_object
 
 MM_TO_METERS = 0.001
 GALLERY_COLLECTION_NAME = "OWDE Primitive Gallery"
-OWDE_VERSION = "0.4.0-alpha.1"
+OWDE_VERSION = "0.3.0-alpha.2"
 
 GALLERY_SHAPES = (
     ShapeType.CIRCLE,
@@ -21,11 +21,6 @@ GALLERY_SHAPES = (
     ShapeType.APERTURE,
     ShapeType.LENS,
     ShapeType.MIRROR,
-    ShapeType.LIGHT_SOURCE,
-    ShapeType.WEIGHT,
-    ShapeType.THRESHOLD,
-    ShapeType.SENSOR,
-    ShapeType.HANDLE,
 )
 
 PRIMITIVE_DEFINITIONS = {
@@ -174,82 +169,6 @@ PRIMITIVE_DEFINITIONS = {
             "Self-Observation",
         ),
     },
-    ShapeType.LIGHT_SOURCE: {
-        "id": "PRIM-0011",
-        "name": "Light Source",
-        "description": (
-            "An emitting surface introducing illumination, "
-            "visibility, and signaling."
-        ),
-        "capabilities": (
-            "Illuminate",
-            "Signal",
-            "Reveal",
-            "Attract",
-            "Orient",
-        ),
-    },
-    ShapeType.WEIGHT: {
-        "id": "PRIM-0012",
-        "name": "Weight",
-        "description": (
-            "A concentrated mass introducing resistance, "
-            "stability, and downward force."
-        ),
-        "capabilities": (
-            "Weigh",
-            "Anchor",
-            "Resist",
-            "Stabilize",
-            "Press",
-        ),
-    },
-    ShapeType.THRESHOLD: {
-        "id": "PRIM-0013",
-        "name": "Threshold",
-        "description": (
-            "A raised boundary marking transition between "
-            "regions, conditions, or states."
-        ),
-        "capabilities": (
-            "Separate",
-            "Transition",
-            "Mark",
-            "Cross",
-            "Regulate",
-        ),
-    },
-    ShapeType.SENSOR: {
-        "id": "PRIM-0014",
-        "name": "Sensor",
-        "description": (
-            "A detecting surface that registers presence, "
-            "change, proximity, or environmental conditions."
-        ),
-        "capabilities": (
-            "Detect",
-            "Measure",
-            "Register",
-            "Trigger",
-            "Respond",
-        ),
-    },
-    ShapeType.HANDLE: {
-        "id": "PRIM-0015",
-        "name": "Handle",
-        "description": (
-            "A graspable interface enabling lifting, pulling, "
-            "carrying, or direct manipulation."
-        ),
-        "capabilities": (
-            "Grasp",
-            "Lift",
-            "Pull",
-            "Carry",
-            "Manipulate",
-        ),
-    },
-
 }
 
 
