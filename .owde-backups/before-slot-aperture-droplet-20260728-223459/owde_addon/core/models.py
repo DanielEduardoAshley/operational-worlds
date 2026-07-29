@@ -9,7 +9,6 @@ class ShapeType(str, Enum):
     TRIANGLE = "TRIANGLE"
     SQUARE = "SQUARE"
     HEXAGON = "HEXAGON"
-    SLOT = "SLOT"
 
     HINGE = "HINGE"
     FOLD = "FOLD"

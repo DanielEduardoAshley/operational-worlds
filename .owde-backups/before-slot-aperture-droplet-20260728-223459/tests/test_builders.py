@@ -16,7 +16,6 @@ RAISED_SHAPES = (
 )
 
 COMPLEX_PRIMITIVES = (
-    ShapeType.SLOT,
     ShapeType.HINGE,
     ShapeType.FOLD,
     ShapeType.APERTURE,
@@ -200,25 +199,6 @@ def test_fold_creates_elevated_plane() -> None:
 
     assert maximum_z > 30.0
 
-
-
-
-def test_slot_creates_rim_above_tile() -> None:
-    parameters = TileParameters(
-        shape=ShapeType.SLOT,
-        tile_height_mm=8.0,
-        shape_width_mm=55.0,
-        shape_height_mm=5.0,
-    )
-
-    mesh = build_tile_mesh(parameters)
-
-    maximum_z = max(
-        vertex[2]
-        for vertex in mesh.vertices
-    )
-
-    assert maximum_z > parameters.tile_height_mm
 
 def test_lens_has_center_apex() -> None:
     parameters = TileParameters(

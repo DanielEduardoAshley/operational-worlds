@@ -8,14 +8,13 @@ from .adapter import create_blender_object
 
 MM_TO_METERS = 0.001
 GALLERY_COLLECTION_NAME = "OWDE Primitive Gallery"
-OWDE_VERSION = "0.3.0-alpha.2"
+OWDE_VERSION = "0.3.0-alpha.1"
 
 GALLERY_SHAPES = (
     ShapeType.CIRCLE,
     ShapeType.TRIANGLE,
     ShapeType.SQUARE,
     ShapeType.HEXAGON,
-    ShapeType.SLOT,
     ShapeType.HINGE,
     ShapeType.FOLD,
     ShapeType.APERTURE,
@@ -81,21 +80,6 @@ PRIMITIVE_DEFINITIONS = {
             "Zone",
             "Boundary",
             "Distributed Orientation",
-        ),
-    },
-    ShapeType.SLOT: {
-        "id": "PRIM-0005",
-        "name": "Slot",
-        "description": (
-            "A linear recessed channel introducing insertion, "
-            "guidance, and constrained movement."
-        ),
-        "capabilities": (
-            "Insertion",
-            "Guidance",
-            "Channel",
-            "Alignment",
-            "Constrained Movement",
         ),
     },
     ShapeType.HINGE: {
@@ -262,210 +246,6 @@ def deselect_all_objects() -> None:
         object_.select_set(False)
 
 
-def get_or_create_dark_insert_material() -> bpy.types.Material:
-    material_name = "OWDE Dark Insert"
-    material = bpy.data.materials.get(material_name)
-
-    if material is None:
-        material = bpy.data.materials.new(
-            material_name
-        )
-        material.diffuse_color = (
-            0.008,
-            0.008,
-            0.012,
-            1.0,
-        )
-
-        material.use_nodes = True
-
-        principled = material.node_tree.nodes.get(
-            "Principled BSDF"
-        )
-
-        if principled is not None:
-            principled.inputs["Base Color"].default_value = (
-                0.005,
-                0.005,
-                0.008,
-                1.0,
-            )
-            principled.inputs["Roughness"].default_value = 0.72
-            principled.inputs["Metallic"].default_value = 0.05
-
-    return material
-
-
-def create_dark_circular_insert(
-    parent_object: bpy.types.Object,
-    parameters: TileParameters,
-) -> bpy.types.Object:
-    radius_m = (
-        parameters.shape_width_mm
-        * 0.46
-        * MM_TO_METERS
-    )
-
-    depth_m = max(
-        0.4,
-        parameters.tile_height_mm * 0.08,
-    ) * MM_TO_METERS
-
-    world_location = (
-        parent_object.location.x,
-        parent_object.location.y,
-        parent_object.location.z + depth_m / 2.0,
-    )
-
-    bpy.ops.mesh.primitive_cylinder_add(
-        vertices=parameters.circle_segments,
-        radius=radius_m,
-        depth=depth_m,
-        location=world_location,
-    )
-
-    insert = bpy.context.active_object
-    insert.name = "PRIM-0008_Aperture_Dark_Insert"
-
-    insert.data.materials.append(
-        get_or_create_dark_insert_material()
-    )
-
-    insert["owde_visual_detail"] = True
-    insert["owde_detail_type"] = "dark_aperture_insert"
-
-    insert.parent = parent_object
-    insert.matrix_parent_inverse = (
-        parent_object.matrix_world.inverted()
-    )
-
-    return insert
-
-
-def create_dark_slot_insert(
-    parent_object: bpy.types.Object,
-    parameters: TileParameters,
-) -> bpy.types.Object:
-    slot_length_mm = parameters.shape_width_mm
-
-    slot_width_mm = max(
-        8.0,
-        min(
-            parameters.shape_height_mm * 2.4,
-            slot_length_mm * 0.30,
-        ),
-    )
-
-    straight_length_mm = max(
-        1.0,
-        slot_length_mm - slot_width_mm,
-    )
-
-    depth_m = max(
-        0.35,
-        parameters.tile_height_mm * 0.07,
-    ) * MM_TO_METERS
-
-    material = get_or_create_dark_insert_material()
-
-    collection = bpy.data.collections.new(
-        f"{parent_object.name}_Slot_Insert"
-    )
-
-    bpy.context.scene.collection.children.link(
-        collection
-    )
-
-    pieces: list[bpy.types.Object] = []
-
-    bpy.ops.mesh.primitive_cube_add(
-        location=(
-            parent_object.location.x,
-            parent_object.location.y,
-            parent_object.location.z + depth_m / 2.0,
-        )
-    )
-
-    center = bpy.context.active_object
-    center.name = "PRIM-0005_Slot_Dark_Center"
-    center.dimensions = (
-        straight_length_mm * MM_TO_METERS,
-        slot_width_mm * MM_TO_METERS,
-        depth_m,
-    )
-
-    bpy.ops.object.transform_apply(
-        location=False,
-        rotation=False,
-        scale=True,
-    )
-
-    pieces.append(center)
-
-    for direction in (-1.0, 1.0):
-        bpy.ops.mesh.primitive_cylinder_add(
-            vertices=parameters.circle_segments,
-            radius=(
-                slot_width_mm
-                / 2.0
-                * MM_TO_METERS
-            ),
-            depth=depth_m,
-            location=(
-                parent_object.location.x
-                + direction
-                * straight_length_mm
-                / 2.0
-                * MM_TO_METERS,
-                parent_object.location.y,
-                parent_object.location.z
-                + depth_m / 2.0,
-            ),
-        )
-
-        cap = bpy.context.active_object
-        cap.name = (
-            "PRIM-0005_Slot_Dark_End_"
-            + ("L" if direction < 0 else "R")
-        )
-        pieces.append(cap)
-
-    for piece in pieces:
-        for current_collection in list(
-            piece.users_collection
-        ):
-            current_collection.objects.unlink(piece)
-
-        collection.objects.link(piece)
-
-        piece.data.materials.append(material)
-        piece["owde_visual_detail"] = True
-        piece["owde_detail_type"] = "dark_slot_insert"
-        piece.parent = parent_object
-        piece.matrix_parent_inverse = (
-            parent_object.matrix_world.inverted()
-        )
-
-    return center
-
-
-def create_primitive_visual_details(
-    object_: bpy.types.Object,
-    parameters: TileParameters,
-) -> None:
-    if parameters.shape is ShapeType.APERTURE:
-        create_dark_circular_insert(
-            object_,
-            parameters,
-        )
-
-    if parameters.shape is ShapeType.SLOT:
-        create_dark_slot_insert(
-            object_,
-            parameters,
-        )
-
-
 class OWDE_OT_create_tile(bpy.types.Operator):
     bl_idname = "owde.create_tile"
     bl_label = "Create Operational Tile"
@@ -503,11 +283,6 @@ class OWDE_OT_create_tile(bpy.types.Operator):
         )
 
         attach_metadata(
-            object_,
-            parameters,
-        )
-
-        create_primitive_visual_details(
             object_,
             parameters,
         )
@@ -632,11 +407,6 @@ class OWDE_OT_create_primitive_gallery(
                 object_,
                 parameters,
                 primitive_index=index + 1,
-            )
-
-            create_primitive_visual_details(
-                object_,
-                parameters,
             )
 
             created_objects.append(object_)

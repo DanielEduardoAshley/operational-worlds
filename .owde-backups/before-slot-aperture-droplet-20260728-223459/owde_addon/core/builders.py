@@ -323,106 +323,6 @@ def build_raised_tile_mesh(
     return combine_meshes(base, raised_shape)
 
 
-
-def build_slot_mesh(
-    parameters: TileParameters,
-) -> MeshData:
-    """Build a recessed capsule-shaped slot on a square tile.
-
-    The core mesh creates the tile and a shallow raised rim. Blender adds
-    a separate dark inset object so the recessed channel reads clearly.
-    """
-
-    base = square_tile_base(parameters)
-
-    slot_length = parameters.shape_width_mm
-    slot_width = max(
-        8.0,
-        min(
-            parameters.shape_height_mm * 2.4,
-            slot_length * 0.30,
-        ),
-    )
-
-    rim_width = max(
-        1.8,
-        slot_width * 0.18,
-    )
-
-    rim_height = max(
-        0.8,
-        parameters.shape_height_mm * 0.22,
-    )
-
-    straight_length = max(
-        1.0,
-        slot_length - slot_width,
-    )
-
-    rail_length = straight_length
-    rail_depth = rim_width
-
-    top_rail = transform_mesh(
-        rectangular_prism(
-            width_mm=rail_length,
-            depth_mm=rail_depth,
-            height_mm=rim_height,
-        ),
-        translate_y_mm=(
-            slot_width / 2.0
-            + rim_width / 2.0
-        ),
-        translate_z_mm=parameters.tile_height_mm,
-    )
-
-    bottom_rail = transform_mesh(
-        rectangular_prism(
-            width_mm=rail_length,
-            depth_mm=rail_depth,
-            height_mm=rim_height,
-        ),
-        translate_y_mm=-(
-            slot_width / 2.0
-            + rim_width / 2.0
-        ),
-        translate_z_mm=parameters.tile_height_mm,
-    )
-
-    end_radius = (
-        slot_width / 2.0
-        + rim_width
-    )
-
-    left_end = transform_mesh(
-        cylinder_mesh(
-            radius_mm=end_radius,
-            length_mm=rim_height,
-            segments=parameters.circle_segments,
-            axis="Z",
-        ),
-        translate_x_mm=-straight_length / 2.0,
-        translate_z_mm=parameters.tile_height_mm,
-    )
-
-    right_end = transform_mesh(
-        cylinder_mesh(
-            radius_mm=end_radius,
-            length_mm=rim_height,
-            segments=parameters.circle_segments,
-            axis="Z",
-        ),
-        translate_x_mm=straight_length / 2.0,
-        translate_z_mm=parameters.tile_height_mm,
-    )
-
-    return combine_meshes(
-        base,
-        top_rail,
-        bottom_rail,
-        left_end,
-        right_end,
-    )
-
 def build_hinge_mesh(
     parameters: TileParameters,
 ) -> MeshData:
@@ -685,45 +585,44 @@ def build_aperture_mesh(
     )
 
 
-def droplet_surface_mesh(
+def spherical_cap_mesh(
     *,
-    diameter_mm: float,
+    radius_mm: float,
     rise_mm: float,
     base_z_mm: float,
     radial_segments: int,
-    ring_segments: int = 14,
+    ring_segments: int = 12,
 ) -> MeshData:
-    """Create a domed teardrop resembling water resting on a surface."""
-
-    if diameter_mm <= 0:
-        raise ValueError(
-            "Droplet diameter must be greater than zero."
-        )
-
     if rise_mm <= 0:
+        raise ValueError("Lens rise must be greater than zero.")
+
+    if rise_mm > radius_mm:
         raise ValueError(
-            "Droplet rise must be greater than zero."
+            "Lens rise cannot exceed its base radius."
         )
 
-    if radial_segments < 24:
-        raise ValueError(
-            "Droplet requires at least 24 radial segments."
-        )
+    sphere_radius = (
+        radius_mm * radius_mm + rise_mm * rise_mm
+    ) / (2.0 * rise_mm)
 
-    radius = diameter_mm / 2.0
+    sphere_center_z = (
+        base_z_mm + rise_mm - sphere_radius
+    )
 
     vertices: list[Point3D] = []
     faces: list[tuple[int, ...]] = []
 
-    # Build nested teardrop rings. The outer ring sits on the tile.
     for ring_index in range(ring_segments):
-        fraction = 1.0 - ring_index / ring_segments
+        fraction = ring_index / ring_segments
+        z = base_z_mm + fraction * rise_mm
 
-        # Rounded water profile: low at the perimeter and high at center.
-        z = (
-            base_z_mm
-            + rise_mm
-            * (1.0 - fraction * fraction)
+        relative_z = z - sphere_center_z
+        ring_radius = math.sqrt(
+            max(
+                0.0,
+                sphere_radius * sphere_radius
+                - relative_z * relative_z,
+            )
         )
 
         for radial_index in range(radial_segments):
@@ -733,43 +632,20 @@ def droplet_surface_mesh(
                 * math.pi
                 / radial_segments
             )
-
-            # A softened cardioid creates a rounded rear body and a
-            # tapered forward point without collapsing vertices.
-            boundary_radius = radius * (
-                0.08
-                + 0.92
-                * (1.0 - math.sin(angle))
-                / 2.0
+            vertices.append(
+                (
+                    ring_radius * math.cos(angle),
+                    ring_radius * math.sin(angle),
+                    z,
+                )
             )
 
-            local_radius = boundary_radius * fraction
-
-            x = local_radius * math.cos(angle)
-            y = local_radius * math.sin(angle)
-
-            # Move the body slightly backward so the pointed end reads
-            # as a droplet rather than a heart.
-            y -= radius * 0.16 * fraction
-
-            vertices.append((x, y, z))
-
     apex_index = len(vertices)
-    vertices.append(
-        (
-            0.0,
-            0.0,
-            base_z_mm + rise_mm,
-        )
-    )
+    vertices.append((0.0, 0.0, base_z_mm + rise_mm))
 
     for ring_index in range(ring_segments - 1):
-        current_offset = (
-            ring_index * radial_segments
-        )
-        next_offset = (
-            (ring_index + 1) * radial_segments
-        )
+        current_offset = ring_index * radial_segments
+        next_offset = (ring_index + 1) * radial_segments
 
         for radial_index in range(radial_segments):
             next_radial = (
@@ -821,46 +697,39 @@ def build_lens_mesh(
 ) -> MeshData:
     base = square_tile_base(parameters)
 
+    lens_radius = parameters.shape_width_mm / 2.0
     lens_rise = min(
         parameters.shape_height_mm,
-        parameters.shape_width_mm * 0.30,
+        lens_radius,
     )
 
-    mount_height = max(
-        0.6,
-        lens_rise * 0.10,
-    )
+    mount_height = max(1.0, lens_rise * 0.25)
 
     mount = transform_mesh(
         cylinder_mesh(
-            radius_mm=parameters.shape_width_mm * 0.37,
+            radius_mm=lens_radius * 1.08,
             length_mm=mount_height,
             segments=parameters.circle_segments,
             axis="Z",
         ),
-        translate_y_mm=-parameters.shape_width_mm * 0.07,
         translate_z_mm=parameters.tile_height_mm,
     )
 
-    droplet = droplet_surface_mesh(
-        diameter_mm=parameters.shape_width_mm,
+    lens = spherical_cap_mesh(
+        radius_mm=lens_radius,
         rise_mm=lens_rise,
-        base_z_mm=(
-            parameters.tile_height_mm
-            + mount_height
-        ),
+        base_z_mm=parameters.tile_height_mm + mount_height,
         radial_segments=parameters.circle_segments,
     )
 
     return combine_meshes(
         base,
         mount,
-        droplet,
+        lens,
     )
 
 
 def build_mirror_mesh(
-
     parameters: TileParameters,
 ) -> MeshData:
     base = square_tile_base(parameters)
@@ -965,9 +834,6 @@ def build_tile_mesh(
 
     if parameters.shape in RAISED_SHAPES:
         return build_raised_tile_mesh(parameters)
-
-    if parameters.shape is ShapeType.SLOT:
-        return build_slot_mesh(parameters)
 
     if parameters.shape is ShapeType.HINGE:
         return build_hinge_mesh(parameters)

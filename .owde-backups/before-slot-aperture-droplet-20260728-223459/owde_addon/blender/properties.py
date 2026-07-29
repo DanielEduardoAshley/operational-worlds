@@ -27,11 +27,6 @@ class OWDE_PG_settings(bpy.types.PropertyGroup):
                 "Introduces six-directional adjacency",
             ),
             (
-                "SLOT",
-                "05 Slot",
-                "Creates a linear channel for insertion or guidance",
-            ),
-            (
                 "HINGE",
                 "06 Hinge",
                 "Enables rotation and connects two states",

@@ -1,0 +1,916 @@
+python3 <<'PY'
+from __future__ import annotations
+
+from datetime import datetime
+from pathlib import Path
+import re
+import shutil
+
+
+files = [
+    Path("owde_addon/core/models.py"),
+    Path("owde_addon/core/builders.py"),
+    Path("owde_addon/blender/properties.py"),
+    Path("owde_addon/blender/operators.py"),
+    Path("owde_addon/blender/panel.py"),
+    Path("tests/test_builders.py"),
+]
+
+missing = [path for path in files if not path.exists()]
+
+if missing:
+    raise SystemExit(
+        "Run this from the operational-worlds repository root.\n"
+        "Missing files:\n"
+        + "\n".join(f"  - {path}" for path in missing)
+    )
+
+timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+backup_root = (
+    Path(".owde-backups")
+    / f"before-slot-aperture-droplet-{timestamp}"
+)
+
+for source in files:
+    destination = backup_root / source
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(source, destination)
+
+print(f"Backup created at {backup_root}")
+
+
+def replace_once(
+    path: Path,
+    old: str,
+    new: str,
+    label: str,
+) -> None:
+    text = path.read_text(encoding="utf-8")
+
+    if old not in text:
+        raise SystemExit(
+            f"Could not patch {label} in {path}.\n"
+            f"Backup remains available at {backup_root}"
+        )
+
+    path.write_text(
+        text.replace(old, new, 1),
+        encoding="utf-8",
+    )
+
+
+# ---------------------------------------------------------------------
+# 1. Add SLOT to the core model.
+# ---------------------------------------------------------------------
+
+replace_once(
+    Path("owde_addon/core/models.py"),
+    '''    HEXAGON = "HEXAGON"
+
+    HINGE = "HINGE"
+''',
+    '''    HEXAGON = "HEXAGON"
+    SLOT = "SLOT"
+
+    HINGE = "HINGE"
+''',
+    "ShapeType.SLOT",
+)
+
+
+# ---------------------------------------------------------------------
+# 2. Add the Slot builder.
+# ---------------------------------------------------------------------
+
+builders_path = Path("owde_addon/core/builders.py")
+builders = builders_path.read_text(encoding="utf-8")
+
+slot_builder = r'''
+
+def build_slot_mesh(
+    parameters: TileParameters,
+) -> MeshData:
+    """Build a recessed capsule-shaped slot on a square tile.
+
+    The core mesh creates the tile and a shallow raised rim. Blender adds
+    a separate dark inset object so the recessed channel reads clearly.
+    """
+
+    base = square_tile_base(parameters)
+
+    slot_length = parameters.shape_width_mm
+    slot_width = max(
+        8.0,
+        min(
+            parameters.shape_height_mm * 2.4,
+            slot_length * 0.30,
+        ),
+    )
+
+    rim_width = max(
+        1.8,
+        slot_width * 0.18,
+    )
+
+    rim_height = max(
+        0.8,
+        parameters.shape_height_mm * 0.22,
+    )
+
+    straight_length = max(
+        1.0,
+        slot_length - slot_width,
+    )
+
+    rail_length = straight_length
+    rail_depth = rim_width
+
+    top_rail = transform_mesh(
+        rectangular_prism(
+            width_mm=rail_length,
+            depth_mm=rail_depth,
+            height_mm=rim_height,
+        ),
+        translate_y_mm=(
+            slot_width / 2.0
+            + rim_width / 2.0
+        ),
+        translate_z_mm=parameters.tile_height_mm,
+    )
+
+    bottom_rail = transform_mesh(
+        rectangular_prism(
+            width_mm=rail_length,
+            depth_mm=rail_depth,
+            height_mm=rim_height,
+        ),
+        translate_y_mm=-(
+            slot_width / 2.0
+            + rim_width / 2.0
+        ),
+        translate_z_mm=parameters.tile_height_mm,
+    )
+
+    end_radius = (
+        slot_width / 2.0
+        + rim_width
+    )
+
+    left_end = transform_mesh(
+        cylinder_mesh(
+            radius_mm=end_radius,
+            length_mm=rim_height,
+            segments=parameters.circle_segments,
+            axis="Z",
+        ),
+        translate_x_mm=-straight_length / 2.0,
+        translate_z_mm=parameters.tile_height_mm,
+    )
+
+    right_end = transform_mesh(
+        cylinder_mesh(
+            radius_mm=end_radius,
+            length_mm=rim_height,
+            segments=parameters.circle_segments,
+            axis="Z",
+        ),
+        translate_x_mm=straight_length / 2.0,
+        translate_z_mm=parameters.tile_height_mm,
+    )
+
+    return combine_meshes(
+        base,
+        top_rail,
+        bottom_rail,
+        left_end,
+        right_end,
+    )
+'''
+
+hinge_marker = "\ndef build_hinge_mesh(\n"
+
+if slot_builder.strip() not in builders:
+    if hinge_marker not in builders:
+        raise SystemExit(
+            "Could not find build_hinge_mesh in builders.py."
+        )
+
+    builders = builders.replace(
+        hinge_marker,
+        slot_builder + hinge_marker,
+        1,
+    )
+
+builders_path.write_text(builders, encoding="utf-8")
+
+
+# ---------------------------------------------------------------------
+# 3. Replace the old circular lens with a teardrop droplet surface.
+# ---------------------------------------------------------------------
+
+builders = builders_path.read_text(encoding="utf-8")
+
+lens_pattern = re.compile(
+    r'''
+def\ spherical_cap_mesh\(
+.*?
+def\ build_mirror_mesh\(
+''',
+    re.VERBOSE | re.DOTALL,
+)
+
+droplet_code = r'''def droplet_surface_mesh(
+    *,
+    diameter_mm: float,
+    rise_mm: float,
+    base_z_mm: float,
+    radial_segments: int,
+    ring_segments: int = 14,
+) -> MeshData:
+    """Create a domed teardrop resembling water resting on a surface."""
+
+    if diameter_mm <= 0:
+        raise ValueError(
+            "Droplet diameter must be greater than zero."
+        )
+
+    if rise_mm <= 0:
+        raise ValueError(
+            "Droplet rise must be greater than zero."
+        )
+
+    if radial_segments < 24:
+        raise ValueError(
+            "Droplet requires at least 24 radial segments."
+        )
+
+    radius = diameter_mm / 2.0
+
+    vertices: list[Point3D] = []
+    faces: list[tuple[int, ...]] = []
+
+    # Build nested teardrop rings. The outer ring sits on the tile.
+    for ring_index in range(ring_segments):
+        fraction = 1.0 - ring_index / ring_segments
+
+        # Rounded water profile: low at the perimeter and high at center.
+        z = (
+            base_z_mm
+            + rise_mm
+            * (1.0 - fraction * fraction)
+        )
+
+        for radial_index in range(radial_segments):
+            angle = (
+                radial_index
+                * 2.0
+                * math.pi
+                / radial_segments
+            )
+
+            # A softened cardioid creates a rounded rear body and a
+            # tapered forward point without collapsing vertices.
+            boundary_radius = radius * (
+                0.08
+                + 0.92
+                * (1.0 - math.sin(angle))
+                / 2.0
+            )
+
+            local_radius = boundary_radius * fraction
+
+            x = local_radius * math.cos(angle)
+            y = local_radius * math.sin(angle)
+
+            # Move the body slightly backward so the pointed end reads
+            # as a droplet rather than a heart.
+            y -= radius * 0.16 * fraction
+
+            vertices.append((x, y, z))
+
+    apex_index = len(vertices)
+    vertices.append(
+        (
+            0.0,
+            -radius * 0.05,
+            base_z_mm + rise_mm,
+        )
+    )
+
+    for ring_index in range(ring_segments - 1):
+        current_offset = (
+            ring_index * radial_segments
+        )
+        next_offset = (
+            (ring_index + 1) * radial_segments
+        )
+
+        for radial_index in range(radial_segments):
+            next_radial = (
+                radial_index + 1
+            ) % radial_segments
+
+            faces.append(
+                (
+                    current_offset + radial_index,
+                    current_offset + next_radial,
+                    next_offset + next_radial,
+                    next_offset + radial_index,
+                )
+            )
+
+    final_ring_offset = (
+        ring_segments - 1
+    ) * radial_segments
+
+    for radial_index in range(radial_segments):
+        next_radial = (
+            radial_index + 1
+        ) % radial_segments
+
+        faces.append(
+            (
+                final_ring_offset + radial_index,
+                final_ring_offset + next_radial,
+                apex_index,
+            )
+        )
+
+    faces.append(
+        tuple(
+            reversed(range(radial_segments))
+        )
+    )
+
+    result = MeshData(
+        vertices=tuple(vertices),
+        faces=tuple(faces),
+    )
+    result.validate()
+    return result
+
+
+def build_lens_mesh(
+    parameters: TileParameters,
+) -> MeshData:
+    base = square_tile_base(parameters)
+
+    lens_rise = min(
+        parameters.shape_height_mm,
+        parameters.shape_width_mm * 0.30,
+    )
+
+    mount_height = max(
+        0.6,
+        lens_rise * 0.10,
+    )
+
+    mount = transform_mesh(
+        cylinder_mesh(
+            radius_mm=parameters.shape_width_mm * 0.37,
+            length_mm=mount_height,
+            segments=parameters.circle_segments,
+            axis="Z",
+        ),
+        translate_y_mm=-parameters.shape_width_mm * 0.07,
+        translate_z_mm=parameters.tile_height_mm,
+    )
+
+    droplet = droplet_surface_mesh(
+        diameter_mm=parameters.shape_width_mm,
+        rise_mm=lens_rise,
+        base_z_mm=(
+            parameters.tile_height_mm
+            + mount_height
+        ),
+        radial_segments=parameters.circle_segments,
+    )
+
+    return combine_meshes(
+        base,
+        mount,
+        droplet,
+    )
+
+
+def build_mirror_mesh(
+'''
+
+builders, count = lens_pattern.subn(
+    droplet_code,
+    builders,
+    count=1,
+)
+
+if count != 1:
+    raise SystemExit(
+        "Could not replace the existing lens builder.\n"
+        f"Restore files from {backup_root} if needed."
+    )
+
+builders_path.write_text(builders, encoding="utf-8")
+
+
+# ---------------------------------------------------------------------
+# 4. Add SLOT to build_tile_mesh.
+# ---------------------------------------------------------------------
+
+replace_once(
+    builders_path,
+    '''    if parameters.shape is ShapeType.HINGE:
+        return build_hinge_mesh(parameters)
+''',
+    '''    if parameters.shape is ShapeType.SLOT:
+        return build_slot_mesh(parameters)
+
+    if parameters.shape is ShapeType.HINGE:
+        return build_hinge_mesh(parameters)
+''',
+    "build_tile_mesh SLOT branch",
+)
+
+
+# ---------------------------------------------------------------------
+# 5. Add Slot to Blender properties.
+# ---------------------------------------------------------------------
+
+properties_path = Path("owde_addon/blender/properties.py")
+properties = properties_path.read_text(encoding="utf-8")
+
+hexagon_property = '''            (
+                "HEXAGON",
+                "04 Raised Hexagon",
+                "Introduces six-directional adjacency",
+            ),
+'''
+
+slot_property = '''            (
+                "HEXAGON",
+                "04 Raised Hexagon",
+                "Introduces six-directional adjacency",
+            ),
+            (
+                "SLOT",
+                "05 Slot",
+                "Creates a linear channel for insertion or guidance",
+            ),
+'''
+
+if '"05 Slot"' not in properties:
+    if hexagon_property not in properties:
+        raise SystemExit(
+            "Could not find the Hexagon property definition."
+        )
+
+    properties = properties.replace(
+        hexagon_property,
+        slot_property,
+        1,
+    )
+
+properties_path.write_text(
+    properties,
+    encoding="utf-8",
+)
+
+
+# ---------------------------------------------------------------------
+# 6. Update operators: gallery, metadata and dark inset objects.
+# ---------------------------------------------------------------------
+
+operators_path = Path("owde_addon/blender/operators.py")
+operators = operators_path.read_text(encoding="utf-8")
+
+operators = operators.replace(
+    'OWDE_VERSION = "0.3.0-alpha.1"',
+    'OWDE_VERSION = "0.3.0-alpha.2"',
+)
+
+if "    ShapeType.SLOT,\n" not in operators:
+    operators = operators.replace(
+        '''    ShapeType.HEXAGON,
+    ShapeType.HINGE,
+''',
+        '''    ShapeType.HEXAGON,
+    ShapeType.SLOT,
+    ShapeType.HINGE,
+''',
+        1,
+    )
+
+slot_definition = '''    ShapeType.SLOT: {
+        "id": "PRIM-0005",
+        "name": "Slot",
+        "description": (
+            "A linear recessed channel introducing insertion, "
+            "guidance, and constrained movement."
+        ),
+        "capabilities": (
+            "Insertion",
+            "Guidance",
+            "Channel",
+            "Alignment",
+            "Constrained Movement",
+        ),
+    },
+'''
+
+if '"PRIM-0005"' not in operators:
+    hinge_definition_marker = '''    ShapeType.HINGE: {
+'''
+
+    operators = operators.replace(
+        hinge_definition_marker,
+        slot_definition + hinge_definition_marker,
+        1,
+    )
+
+visual_helpers = r'''
+
+def get_or_create_dark_insert_material() -> bpy.types.Material:
+    material_name = "OWDE Dark Insert"
+    material = bpy.data.materials.get(material_name)
+
+    if material is None:
+        material = bpy.data.materials.new(
+            material_name
+        )
+        material.diffuse_color = (
+            0.008,
+            0.008,
+            0.012,
+            1.0,
+        )
+
+        material.use_nodes = True
+
+        principled = material.node_tree.nodes.get(
+            "Principled BSDF"
+        )
+
+        if principled is not None:
+            principled.inputs["Base Color"].default_value = (
+                0.005,
+                0.005,
+                0.008,
+                1.0,
+            )
+            principled.inputs["Roughness"].default_value = 0.72
+            principled.inputs["Metallic"].default_value = 0.05
+
+    return material
+
+
+def create_dark_circular_insert(
+    parent_object: bpy.types.Object,
+    parameters: TileParameters,
+) -> bpy.types.Object:
+    radius_m = (
+        parameters.shape_width_mm
+        * 0.46
+        * MM_TO_METERS
+    )
+
+    depth_m = max(
+        0.4,
+        parameters.tile_height_mm * 0.08,
+    ) * MM_TO_METERS
+
+    world_location = (
+        parent_object.location.x,
+        parent_object.location.y,
+        parent_object.location.z + depth_m / 2.0,
+    )
+
+    bpy.ops.mesh.primitive_cylinder_add(
+        vertices=parameters.circle_segments,
+        radius=radius_m,
+        depth=depth_m,
+        location=world_location,
+    )
+
+    insert = bpy.context.active_object
+    insert.name = "PRIM-0008_Aperture_Dark_Insert"
+
+    insert.data.materials.append(
+        get_or_create_dark_insert_material()
+    )
+
+    insert["owde_visual_detail"] = True
+    insert["owde_detail_type"] = "dark_aperture_insert"
+
+    insert.parent = parent_object
+    insert.matrix_parent_inverse = (
+        parent_object.matrix_world.inverted()
+    )
+
+    return insert
+
+
+def create_dark_slot_insert(
+    parent_object: bpy.types.Object,
+    parameters: TileParameters,
+) -> bpy.types.Object:
+    slot_length_mm = parameters.shape_width_mm
+
+    slot_width_mm = max(
+        8.0,
+        min(
+            parameters.shape_height_mm * 2.4,
+            slot_length_mm * 0.30,
+        ),
+    )
+
+    straight_length_mm = max(
+        1.0,
+        slot_length_mm - slot_width_mm,
+    )
+
+    depth_m = max(
+        0.35,
+        parameters.tile_height_mm * 0.07,
+    ) * MM_TO_METERS
+
+    material = get_or_create_dark_insert_material()
+
+    collection = bpy.data.collections.new(
+        f"{parent_object.name}_Slot_Insert"
+    )
+
+    bpy.context.scene.collection.children.link(
+        collection
+    )
+
+    pieces: list[bpy.types.Object] = []
+
+    bpy.ops.mesh.primitive_cube_add(
+        location=(
+            parent_object.location.x,
+            parent_object.location.y,
+            parent_object.location.z + depth_m / 2.0,
+        )
+    )
+
+    center = bpy.context.active_object
+    center.name = "PRIM-0005_Slot_Dark_Center"
+    center.dimensions = (
+        straight_length_mm * MM_TO_METERS,
+        slot_width_mm * MM_TO_METERS,
+        depth_m,
+    )
+
+    bpy.ops.object.transform_apply(
+        location=False,
+        rotation=False,
+        scale=True,
+    )
+
+    pieces.append(center)
+
+    for direction in (-1.0, 1.0):
+        bpy.ops.mesh.primitive_cylinder_add(
+            vertices=parameters.circle_segments,
+            radius=(
+                slot_width_mm
+                / 2.0
+                * MM_TO_METERS
+            ),
+            depth=depth_m,
+            location=(
+                parent_object.location.x
+                + direction
+                * straight_length_mm
+                / 2.0
+                * MM_TO_METERS,
+                parent_object.location.y,
+                parent_object.location.z
+                + depth_m / 2.0,
+            ),
+        )
+
+        cap = bpy.context.active_object
+        cap.name = (
+            "PRIM-0005_Slot_Dark_End_"
+            + ("L" if direction < 0 else "R")
+        )
+        pieces.append(cap)
+
+    for piece in pieces:
+        for current_collection in list(
+            piece.users_collection
+        ):
+            current_collection.objects.unlink(piece)
+
+        collection.objects.link(piece)
+
+        piece.data.materials.append(material)
+        piece["owde_visual_detail"] = True
+        piece["owde_detail_type"] = "dark_slot_insert"
+        piece.parent = parent_object
+        piece.matrix_parent_inverse = (
+            parent_object.matrix_world.inverted()
+        )
+
+    return center
+
+
+def create_primitive_visual_details(
+    object_: bpy.types.Object,
+    parameters: TileParameters,
+) -> None:
+    if parameters.shape is ShapeType.APERTURE:
+        create_dark_circular_insert(
+            object_,
+            parameters,
+        )
+
+    if parameters.shape is ShapeType.SLOT:
+        create_dark_slot_insert(
+            object_,
+            parameters,
+        )
+'''
+
+if "def create_dark_circular_insert(" not in operators:
+    marker = "\n\nclass OWDE_OT_create_tile"
+
+    if marker not in operators:
+        raise SystemExit(
+            "Could not find OWDE_OT_create_tile."
+        )
+
+    operators = operators.replace(
+        marker,
+        visual_helpers + marker,
+        1,
+    )
+
+# Add visual details to single primitive creation.
+single_metadata = '''        attach_metadata(
+            object_,
+            parameters,
+        )
+
+        object_.select_set(True)
+'''
+
+single_metadata_updated = '''        attach_metadata(
+            object_,
+            parameters,
+        )
+
+        create_primitive_visual_details(
+            object_,
+            parameters,
+        )
+
+        object_.select_set(True)
+'''
+
+if "create_primitive_visual_details(\n            object_,\n            parameters,\n        )" not in operators:
+    if single_metadata not in operators:
+        raise SystemExit(
+            "Could not patch single primitive visual details."
+        )
+
+    operators = operators.replace(
+        single_metadata,
+        single_metadata_updated,
+        1,
+    )
+
+# Add visual details to every gallery primitive after location and metadata.
+gallery_metadata = '''            attach_metadata(
+                object_,
+                parameters,
+                primitive_index=index + 1,
+            )
+
+            created_objects.append(object_)
+'''
+
+gallery_metadata_updated = '''            attach_metadata(
+                object_,
+                parameters,
+                primitive_index=index + 1,
+            )
+
+            create_primitive_visual_details(
+                object_,
+                parameters,
+            )
+
+            created_objects.append(object_)
+'''
+
+if gallery_metadata in operators:
+    operators = operators.replace(
+        gallery_metadata,
+        gallery_metadata_updated,
+        1,
+    )
+
+operators_path.write_text(
+    operators,
+    encoding="utf-8",
+)
+
+
+# ---------------------------------------------------------------------
+# 7. Update panel labels and circular primitive handling.
+# ---------------------------------------------------------------------
+
+panel_path = Path("owde_addon/blender/panel.py")
+panel = panel_path.read_text(encoding="utf-8")
+
+if '    "SLOT",\n' not in panel:
+    panel = panel.replace(
+        '''    "CIRCLE",
+    "HINGE",
+''',
+        '''    "CIRCLE",
+    "SLOT",
+    "HINGE",
+''',
+        1,
+    )
+
+panel = panel.replace(
+    'text="OW01-OW04 and OW06-OW10"',
+    'text="OW01-OW10"',
+)
+
+panel_path.write_text(
+    panel,
+    encoding="utf-8",
+)
+
+
+# ---------------------------------------------------------------------
+# 8. Update tests.
+# ---------------------------------------------------------------------
+
+tests_path = Path("tests/test_builders.py")
+tests = tests_path.read_text(encoding="utf-8")
+
+if "ShapeType.SLOT," not in tests:
+    tests = tests.replace(
+        '''COMPLEX_PRIMITIVES = (
+    ShapeType.HINGE,
+''',
+        '''COMPLEX_PRIMITIVES = (
+    ShapeType.SLOT,
+    ShapeType.HINGE,
+''',
+        1,
+    )
+
+slot_test = r'''
+
+
+def test_slot_creates_rim_above_tile() -> None:
+    parameters = TileParameters(
+        shape=ShapeType.SLOT,
+        tile_height_mm=8.0,
+        shape_width_mm=55.0,
+        shape_height_mm=5.0,
+    )
+
+    mesh = build_tile_mesh(parameters)
+
+    maximum_z = max(
+        vertex[2]
+        for vertex in mesh.vertices
+    )
+
+    assert maximum_z > parameters.tile_height_mm
+'''
+
+if "def test_slot_creates_rim_above_tile" not in tests:
+    lens_test_marker = "\ndef test_lens_has_center_apex()"
+
+    if lens_test_marker not in tests:
+        raise SystemExit(
+            "Could not find lens test insertion point."
+        )
+
+    tests = tests.replace(
+        lens_test_marker,
+        slot_test + lens_test_marker,
+        1,
+    )
+
+tests_path.write_text(
+    tests,
+    encoding="utf-8",
+)
+
+print("Added PRIM-0005 Slot.")
+print("Added dark Slot and Aperture inserts.")
+print("Changed Lens to a teardrop droplet surface.")
+print("Preserved Primitive Gallery and Primitive Inspector.")
+print("Preserved the 30-degree flat-top Hexagon orientation.")
+PY
+
+python3 -m pytest
+python3 scripts/build_addon.py

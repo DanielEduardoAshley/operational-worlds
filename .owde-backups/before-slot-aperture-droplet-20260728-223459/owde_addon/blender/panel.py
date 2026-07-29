@@ -5,7 +5,6 @@ import bpy
 
 CIRCULAR_PRIMITIVES = {
     "CIRCLE",
-    "SLOT",
     "HINGE",
     "APERTURE",
     "LENS",
@@ -91,7 +90,7 @@ class OWDE_PT_tile_builder(bpy.types.Panel):
         )
 
         gallery_box.label(
-            text="OW01-OW10"
+            text="OW01-OW04 and OW06-OW10"
         )
 
         gallery_box.prop(
