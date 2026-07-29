@@ -54,17 +54,27 @@ The Blender implementation currently supports parametric primitive generation,
 individual tiles, a comparative Primitive Gallery, structured metadata, a
 Primitive Inspector, reproducible add-on builds, and automated tests.
 
-## Parallel development
+## Governing principles
 
-Operational Worlds follows the Parallel Evolution Principle:
+Operational Worlds currently follows three foundational principles.
+
+### Parallel Evolution Principle
 
 ```text
-Theory ↔ Methodology ↔ Practice ↔ Engineering
+Theory ↔ Methodology ↔ Practice ↔ Documentation ↔ Engineering
 ```
 
-Engineering may expose a conceptual ambiguity. Fabrication may revise a
-specification. Observation may revise a method. A theoretical distinction may
-require a new software representation.
+Each research stream may revise the others.
+
+### Canonical Representation Principle
+
+Established concepts, models, primitives, metadata, and releases require stable
+reference representations so that variants and revisions can be compared.
+
+### Research First Principle
+
+Engineering, documentation, and fabrication remain answerable to the research
+questions they are intended to support.
 
 ## Repository as research instrument
 
