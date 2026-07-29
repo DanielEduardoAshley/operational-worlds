@@ -105,9 +105,18 @@ docs/
 2. [Introduction](docs/foundations/01-introduction.md)
 3. [Repository as Research Instrument](docs/foundations/04-repository-as-research-instrument.md)
 4. [Conceptual Framework](docs/conceptual-framework/README.md)
-5. [Methodology](docs/methodology/README.md)
-6. [Primitive Catalog](docs/primitives/README.md)
-7. [Engineering Overview](docs/engineering/README.md)
+5. [Operational World](docs/conceptual-framework/01-operational-world.md)
+6. [Primitive](docs/conceptual-framework/02-primitive.md)
+7. [Capability](docs/conceptual-framework/03-capability.md)
+8. [Participant Action](docs/conceptual-framework/04-participant-action.md)
+9. [Mechanism](docs/conceptual-framework/05-mechanism.md)
+10. [Observation](docs/conceptual-framework/06-observation.md)
+11. [Evidence](docs/conceptual-framework/07-evidence.md)
+12. [Interface](docs/conceptual-framework/08-interface.md)
+13. [Infrastructure](docs/conceptual-framework/09-infrastructure.md)
+14. [Methodology](docs/methodology/README.md)
+15. [Primitive Catalog](docs/primitives/README.md)
+16. [Engineering Overview](docs/engineering/README.md)
 
 ## Status
 
