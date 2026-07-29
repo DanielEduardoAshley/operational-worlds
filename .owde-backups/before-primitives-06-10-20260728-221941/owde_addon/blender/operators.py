@@ -8,27 +8,20 @@ from .adapter import create_blender_object
 
 MM_TO_METERS = 0.001
 GALLERY_COLLECTION_NAME = "OWDE Primitive Gallery"
-OWDE_VERSION = "0.3.0-alpha.1"
+OWDE_VERSION = "0.2.0-alpha.1"
 
 GALLERY_SHAPES = (
     ShapeType.CIRCLE,
     ShapeType.TRIANGLE,
     ShapeType.SQUARE,
     ShapeType.HEXAGON,
-    ShapeType.HINGE,
-    ShapeType.FOLD,
-    ShapeType.APERTURE,
-    ShapeType.LENS,
-    ShapeType.MIRROR,
 )
 
 PRIMITIVE_DEFINITIONS = {
     ShapeType.CIRCLE: {
         "id": "PRIM-0001",
         "name": "Raised Circle",
-        "description": (
-            "A raised circular region introducing centrality."
-        ),
+        "description": "A raised circular region introducing centrality.",
         "capabilities": (
             "Center",
             "Zone",
@@ -80,77 +73,6 @@ PRIMITIVE_DEFINITIONS = {
             "Zone",
             "Boundary",
             "Distributed Orientation",
-        ),
-    },
-    ShapeType.HINGE: {
-        "id": "PRIM-0006",
-        "name": "Hinge",
-        "description": (
-            "A rotational joint connecting two spatial states."
-        ),
-        "capabilities": (
-            "Rotation",
-            "Connection",
-            "Articulation",
-            "State Change",
-            "Axis",
-        ),
-    },
-    ShapeType.FOLD: {
-        "id": "PRIM-0007",
-        "name": "Fold",
-        "description": (
-            "A planar displacement producing an inside, outside, "
-            "and directional change."
-        ),
-        "capabilities": (
-            "Plane Change",
-            "Inside",
-            "Outside",
-            "Crease",
-            "Orientation",
-        ),
-    },
-    ShapeType.APERTURE: {
-        "id": "PRIM-0008",
-        "name": "Aperture",
-        "description": (
-            "An opening created by removing material from a surface."
-        ),
-        "capabilities": (
-            "Opening",
-            "Passage",
-            "Visibility",
-            "Framing",
-            "Permeability",
-        ),
-    },
-    ShapeType.LENS: {
-        "id": "PRIM-0009",
-        "name": "Lens",
-        "description": (
-            "A convex perceptual surface that focuses or distorts."
-        ),
-        "capabilities": (
-            "Focus",
-            "Distortion",
-            "Magnification",
-            "Perception",
-            "Refraction",
-        ),
-    },
-    ShapeType.MIRROR: {
-        "id": "PRIM-0010",
-        "name": "Mirror",
-        "description": (
-            "A reflective surface creating a virtual spatial depth."
-        ),
-        "capabilities": (
-            "Reflection",
-            "Duplication",
-            "Virtual Depth",
-            "Reversal",
-            "Self-Observation",
         ),
     },
 }
@@ -206,9 +128,7 @@ def attach_metadata(
 def get_or_create_gallery_collection(
     context: bpy.types.Context,
 ) -> bpy.types.Collection:
-    collection = bpy.data.collections.get(
-        GALLERY_COLLECTION_NAME
-    )
+    collection = bpy.data.collections.get(GALLERY_COLLECTION_NAME)
 
     if collection is None:
         collection = bpy.data.collections.new(
@@ -223,19 +143,14 @@ def clear_gallery_collection(
     collection: bpy.types.Collection,
 ) -> None:
     for object_ in list(collection.objects):
-        bpy.data.objects.remove(
-            object_,
-            do_unlink=True,
-        )
+        bpy.data.objects.remove(object_, do_unlink=True)
 
 
 def move_object_to_collection(
     object_: bpy.types.Object,
     collection: bpy.types.Collection,
 ) -> None:
-    for current_collection in list(
-        object_.users_collection
-    ):
+    for current_collection in list(object_.users_collection):
         current_collection.objects.unlink(object_)
 
     collection.objects.link(object_)
@@ -249,14 +164,11 @@ def deselect_all_objects() -> None:
 class OWDE_OT_create_tile(bpy.types.Operator):
     bl_idname = "owde.create_tile"
     bl_label = "Create Operational Tile"
-    bl_description = (
-        "Create one parametric Operational Worlds primitive"
-    )
+    bl_description = "Create one parametric Operational Worlds tile"
     bl_options = {"REGISTER", "UNDO"}
 
     def execute(self, context: bpy.types.Context):
         settings = context.scene.owde_settings
-
         parameters = parameters_from_settings(
             settings,
             ShapeType(settings.shape),
@@ -270,9 +182,7 @@ class OWDE_OT_create_tile(bpy.types.Operator):
 
         deselect_all_objects()
 
-        definition = PRIMITIVE_DEFINITIONS[
-            parameters.shape
-        ]
+        definition = PRIMITIVE_DEFINITIONS[parameters.shape]
 
         object_ = create_blender_object(
             name=(
@@ -282,10 +192,7 @@ class OWDE_OT_create_tile(bpy.types.Operator):
             mesh_data=mesh_data,
         )
 
-        attach_metadata(
-            object_,
-            parameters,
-        )
+        attach_metadata(object_, parameters)
 
         object_.select_set(True)
         context.view_layer.objects.active = object_
@@ -298,14 +205,12 @@ class OWDE_OT_create_tile(bpy.types.Operator):
         return {"FINISHED"}
 
 
-class OWDE_OT_create_primitive_gallery(
-    bpy.types.Operator
-):
+class OWDE_OT_create_primitive_gallery(bpy.types.Operator):
     bl_idname = "owde.create_primitive_gallery"
     bl_label = "Create Primitive Gallery"
     bl_description = (
-        "Create all currently implemented Operational Worlds "
-        "primitives in an evenly spaced gallery"
+        "Create Circle, Triangle, Square, and Hexagon tiles "
+        "in an evenly spaced row"
     )
     bl_options = {"REGISTER", "UNDO"}
 
@@ -326,14 +231,12 @@ class OWDE_OT_create_primitive_gallery(
             self.report({"ERROR"}, str(error))
             return {"CANCELLED"}
 
-        gallery_collection = (
-            get_or_create_gallery_collection(context)
+        gallery_collection = get_or_create_gallery_collection(
+            context
         )
 
         if settings.gallery_clear_existing:
-            clear_gallery_collection(
-                gallery_collection
-            )
+            clear_gallery_collection(gallery_collection)
 
         deselect_all_objects()
 
@@ -342,29 +245,14 @@ class OWDE_OT_create_primitive_gallery(
             + settings.gallery_gap_mm
         )
 
-        column_count = 3
-        row_count = (
-            len(GALLERY_SHAPES)
-            + column_count
-            - 1
-        ) // column_count
-
         gallery_width_mm = (
             center_distance_mm
-            * (column_count - 1)
-        )
-
-        gallery_depth_mm = (
-            center_distance_mm
-            * (row_count - 1)
+            * (len(GALLERY_SHAPES) - 1)
         )
 
         starting_x_mm = -gallery_width_mm / 2.0
-        starting_y_mm = gallery_depth_mm / 2.0
 
-        created_objects: list[
-            bpy.types.Object
-        ] = []
+        created_objects: list[bpy.types.Object] = []
 
         for index, (parameters, mesh_data) in enumerate(
             zip(parameter_sets, meshes)
@@ -388,19 +276,13 @@ class OWDE_OT_create_primitive_gallery(
                 gallery_collection,
             )
 
-            column = index % column_count
-            row = index // column_count
-
-            object_.location.x = (
+            x_mm = (
                 starting_x_mm
-                + column * center_distance_mm
-            ) * MM_TO_METERS
+                + index * center_distance_mm
+            )
 
-            object_.location.y = (
-                starting_y_mm
-                - row * center_distance_mm
-            ) * MM_TO_METERS
-
+            object_.location.x = x_mm * MM_TO_METERS
+            object_.location.y = 0.0
             object_.location.z = 0.0
 
             attach_metadata(
@@ -417,24 +299,17 @@ class OWDE_OT_create_primitive_gallery(
             object_.select_set(True)
 
         if created_objects:
-            context.view_layer.objects.active = (
-                created_objects[0]
-            )
+            context.view_layer.objects.active = created_objects[0]
 
         self.report(
             {"INFO"},
-            (
-                "Created gallery with "
-                f"{len(created_objects)} operational primitives"
-            ),
+            "Created gallery with 4 operational primitives",
         )
 
         return {"FINISHED"}
 
 
-class OWDE_OT_frame_primitive_gallery(
-    bpy.types.Operator
-):
+class OWDE_OT_frame_primitive_gallery(bpy.types.Operator):
     bl_idname = "owde.frame_primitive_gallery"
     bl_label = "Frame Gallery"
     bl_description = (
@@ -465,19 +340,14 @@ class OWDE_OT_frame_primitive_gallery(
         if not visible_objects:
             self.report(
                 {"WARNING"},
-                (
-                    "The primitive gallery contains "
-                    "no visible objects"
-                ),
+                "The primitive gallery contains no visible objects",
             )
             return {"CANCELLED"}
 
         for object_ in visible_objects:
             object_.select_set(True)
 
-        context.view_layer.objects.active = (
-            visible_objects[0]
-        )
+        context.view_layer.objects.active = visible_objects[0]
 
         try:
             bpy.ops.view3d.view_selected(
@@ -486,10 +356,7 @@ class OWDE_OT_frame_primitive_gallery(
         except RuntimeError:
             self.report(
                 {"INFO"},
-                (
-                    "Gallery selected. "
-                    "Press Home to frame it."
-                ),
+                "Gallery selected. Press Home to frame it.",
             )
 
         return {"FINISHED"}

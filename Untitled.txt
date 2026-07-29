@@ -1,0 +1,2177 @@
+python3 <<'PY'
+from pathlib import Path
+from datetime import datetime
+import shutil
+
+required_paths = [
+    Path("owde_addon/core/builders.py"),
+    Path("owde_addon/core/models.py"),
+    Path("owde_addon/blender/operators.py"),
+    Path("owde_addon/blender/panel.py"),
+    Path("owde_addon/blender/properties.py"),
+    Path("tests/test_builders.py"),
+]
+
+missing = [path for path in required_paths if not path.exists()]
+
+if missing:
+    formatted = "\n".join(f"  - {path}" for path in missing)
+    raise SystemExit(
+        "Run this command from the operational-worlds repository root.\n"
+        "The following required files could not be found:\n"
+        f"{formatted}"
+    )
+
+timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+backup_root = Path(".owde-backups") / f"before-primitives-06-10-{timestamp}"
+
+for source in required_paths:
+    destination = backup_root / source
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(source, destination)
+
+print(f"Backed up existing files to: {backup_root}")
+PY
+
+cat > owde_addon/core/models.py <<'PY'
+from __future__ import annotations
+
+from dataclasses import dataclass
+from enum import Enum
+
+
+class ShapeType(str, Enum):
+    CIRCLE = "CIRCLE"
+    TRIANGLE = "TRIANGLE"
+    SQUARE = "SQUARE"
+    HEXAGON = "HEXAGON"
+
+    HINGE = "HINGE"
+    FOLD = "FOLD"
+    APERTURE = "APERTURE"
+    LENS = "LENS"
+    MIRROR = "MIRROR"
+
+
+@dataclass(frozen=True, slots=True)
+class TileParameters:
+    """Tool-independent parameters for one operational tile.
+
+    All dimensions are expressed in millimeters.
+
+    For the original raised primitives:
+
+    - shape_width_mm controls the outline width.
+    - shape_height_mm controls the raised extrusion.
+
+    For OW06-OW10 these values become general feature dimensions:
+
+    - Hinge: barrel length and barrel diameter.
+    - Fold: panel width and panel thickness.
+    - Aperture: opening diameter.
+    - Lens: lens diameter and rise.
+    - Mirror: reflective surface width and thickness.
+    """
+
+    shape: ShapeType = ShapeType.CIRCLE
+
+    tile_width_mm: float = 100.0
+    tile_depth_mm: float = 100.0
+    tile_height_mm: float = 8.0
+
+    shape_width_mm: float = 55.0
+    shape_height_mm: float = 5.0
+
+    bevel_mm: float = 1.0
+    circle_segments: int = 64
+
+    def validate(self) -> None:
+        positive_values = {
+            "tile_width_mm": self.tile_width_mm,
+            "tile_depth_mm": self.tile_depth_mm,
+            "tile_height_mm": self.tile_height_mm,
+            "shape_width_mm": self.shape_width_mm,
+            "shape_height_mm": self.shape_height_mm,
+        }
+
+        for name, value in positive_values.items():
+            if value <= 0:
+                raise ValueError(f"{name} must be greater than zero.")
+
+        maximum_feature_width = min(
+            self.tile_width_mm,
+            self.tile_depth_mm,
+        )
+
+        if self.shape_width_mm >= maximum_feature_width:
+            raise ValueError(
+                "The operational feature must be smaller than the tile."
+            )
+
+        if self.bevel_mm < 0:
+            raise ValueError("bevel_mm cannot be negative.")
+
+        if self.circle_segments < 24:
+            raise ValueError("circle_segments must be at least 24.")
+PY
+
+cat > owde_addon/core/builders.py <<'PY'
+from __future__ import annotations
+
+import math
+from collections.abc import Sequence
+
+from .mesh import MeshData
+from .models import ShapeType, TileParameters
+
+
+Point2D = tuple[float, float]
+Point3D = tuple[float, float, float]
+
+
+RAISED_SHAPES = {
+    ShapeType.CIRCLE,
+    ShapeType.TRIANGLE,
+    ShapeType.SQUARE,
+    ShapeType.HEXAGON,
+}
+
+
+def regular_polygon_points(
+    sides: int,
+    diameter_mm: float,
+    rotation_degrees: float = 90.0,
+) -> tuple[Point2D, ...]:
+    if sides < 3:
+        raise ValueError("A polygon requires at least three sides.")
+
+    if diameter_mm <= 0:
+        raise ValueError("diameter_mm must be greater than zero.")
+
+    radius = diameter_mm / 2.0
+    rotation = math.radians(rotation_degrees)
+
+    return tuple(
+        (
+            radius * math.cos(
+                rotation + index * 2.0 * math.pi / sides
+            ),
+            radius * math.sin(
+                rotation + index * 2.0 * math.pi / sides
+            ),
+        )
+        for index in range(sides)
+    )
+
+
+def circle_points(
+    diameter_mm: float,
+    segments: int,
+) -> tuple[Point2D, ...]:
+    if segments < 24:
+        raise ValueError("Circle requires at least 24 segments.")
+
+    return regular_polygon_points(
+        sides=segments,
+        diameter_mm=diameter_mm,
+        rotation_degrees=0.0,
+    )
+
+
+def shape_outline(
+    parameters: TileParameters,
+) -> tuple[Point2D, ...]:
+    if parameters.shape is ShapeType.CIRCLE:
+        return circle_points(
+            diameter_mm=parameters.shape_width_mm,
+            segments=parameters.circle_segments,
+        )
+
+    if parameters.shape is ShapeType.TRIANGLE:
+        return regular_polygon_points(
+            sides=3,
+            diameter_mm=parameters.shape_width_mm,
+            rotation_degrees=90.0,
+        )
+
+    if parameters.shape is ShapeType.SQUARE:
+        return regular_polygon_points(
+            sides=4,
+            diameter_mm=parameters.shape_width_mm,
+            rotation_degrees=45.0,
+        )
+
+    if parameters.shape is ShapeType.HEXAGON:
+        return regular_polygon_points(
+            sides=6,
+            diameter_mm=parameters.shape_width_mm,
+            rotation_degrees=30.0,
+        )
+
+    raise ValueError(
+        f"{parameters.shape.value} does not use a flat shape outline."
+    )
+
+
+def extrude_polygon(
+    outline: Sequence[Point2D],
+    bottom_z_mm: float,
+    top_z_mm: float,
+) -> MeshData:
+    if len(outline) < 3:
+        raise ValueError("Outline requires at least three points.")
+
+    if top_z_mm <= bottom_z_mm:
+        raise ValueError(
+            "top_z_mm must be greater than bottom_z_mm."
+        )
+
+    count = len(outline)
+
+    bottom = tuple(
+        (x, y, bottom_z_mm)
+        for x, y in outline
+    )
+    top = tuple(
+        (x, y, top_z_mm)
+        for x, y in outline
+    )
+
+    vertices = bottom + top
+    faces: list[tuple[int, ...]] = []
+
+    faces.append(tuple(reversed(range(count))))
+    faces.append(tuple(range(count, count * 2)))
+
+    for index in range(count):
+        next_index = (index + 1) % count
+        faces.append(
+            (
+                index,
+                next_index,
+                count + next_index,
+                count + index,
+            )
+        )
+
+    result = MeshData(
+        vertices=vertices,
+        faces=tuple(faces),
+    )
+    result.validate()
+    return result
+
+
+def combine_meshes(*meshes: MeshData) -> MeshData:
+    vertices: list[Point3D] = []
+    faces: list[tuple[int, ...]] = []
+    offset = 0
+
+    for mesh in meshes:
+        mesh.validate()
+        vertices.extend(mesh.vertices)
+
+        for face in mesh.faces:
+            faces.append(
+                tuple(index + offset for index in face)
+            )
+
+        offset += len(mesh.vertices)
+
+    result = MeshData(
+        vertices=tuple(vertices),
+        faces=tuple(faces),
+    )
+    result.validate()
+    return result
+
+
+def transform_mesh(
+    mesh: MeshData,
+    *,
+    translate_x_mm: float = 0.0,
+    translate_y_mm: float = 0.0,
+    translate_z_mm: float = 0.0,
+    rotate_x_degrees: float = 0.0,
+    rotate_y_degrees: float = 0.0,
+    rotate_z_degrees: float = 0.0,
+) -> MeshData:
+    x_angle = math.radians(rotate_x_degrees)
+    y_angle = math.radians(rotate_y_degrees)
+    z_angle = math.radians(rotate_z_degrees)
+
+    cos_x = math.cos(x_angle)
+    sin_x = math.sin(x_angle)
+    cos_y = math.cos(y_angle)
+    sin_y = math.sin(y_angle)
+    cos_z = math.cos(z_angle)
+    sin_z = math.sin(z_angle)
+
+    transformed: list[Point3D] = []
+
+    for x, y, z in mesh.vertices:
+        y, z = (
+            y * cos_x - z * sin_x,
+            y * sin_x + z * cos_x,
+        )
+
+        x, z = (
+            x * cos_y + z * sin_y,
+            -x * sin_y + z * cos_y,
+        )
+
+        x, y = (
+            x * cos_z - y * sin_z,
+            x * sin_z + y * cos_z,
+        )
+
+        transformed.append(
+            (
+                x + translate_x_mm,
+                y + translate_y_mm,
+                z + translate_z_mm,
+            )
+        )
+
+    result = MeshData(
+        vertices=tuple(transformed),
+        faces=mesh.faces,
+    )
+    result.validate()
+    return result
+
+
+def rectangular_prism(
+    width_mm: float,
+    depth_mm: float,
+    height_mm: float,
+    *,
+    bottom_z_mm: float = 0.0,
+) -> MeshData:
+    half_width = width_mm / 2.0
+    half_depth = depth_mm / 2.0
+
+    outline = (
+        (-half_width, -half_depth),
+        (half_width, -half_depth),
+        (half_width, half_depth),
+        (-half_width, half_depth),
+    )
+
+    return extrude_polygon(
+        outline=outline,
+        bottom_z_mm=bottom_z_mm,
+        top_z_mm=bottom_z_mm + height_mm,
+    )
+
+
+def cylinder_mesh(
+    radius_mm: float,
+    length_mm: float,
+    segments: int,
+    *,
+    axis: str = "Z",
+) -> MeshData:
+    if radius_mm <= 0:
+        raise ValueError("radius_mm must be greater than zero.")
+
+    if length_mm <= 0:
+        raise ValueError("length_mm must be greater than zero.")
+
+    if segments < 12:
+        raise ValueError("Cylinder requires at least 12 segments.")
+
+    circle = circle_points(
+        diameter_mm=radius_mm * 2.0,
+        segments=segments,
+    )
+
+    if axis == "Z":
+        return extrude_polygon(
+            outline=circle,
+            bottom_z_mm=0.0,
+            top_z_mm=length_mm,
+        )
+
+    z_axis_mesh = extrude_polygon(
+        outline=circle,
+        bottom_z_mm=-length_mm / 2.0,
+        top_z_mm=length_mm / 2.0,
+    )
+
+    if axis == "X":
+        return transform_mesh(
+            z_axis_mesh,
+            rotate_y_degrees=90.0,
+        )
+
+    if axis == "Y":
+        return transform_mesh(
+            z_axis_mesh,
+            rotate_x_degrees=90.0,
+        )
+
+    raise ValueError(f"Unsupported cylinder axis: {axis}")
+
+
+def square_tile_base(
+    parameters: TileParameters,
+) -> MeshData:
+    return rectangular_prism(
+        width_mm=parameters.tile_width_mm,
+        depth_mm=parameters.tile_depth_mm,
+        height_mm=parameters.tile_height_mm,
+    )
+
+
+def build_raised_tile_mesh(
+    parameters: TileParameters,
+) -> MeshData:
+    base = square_tile_base(parameters)
+
+    raised_shape = extrude_polygon(
+        outline=shape_outline(parameters),
+        bottom_z_mm=parameters.tile_height_mm,
+        top_z_mm=(
+            parameters.tile_height_mm
+            + parameters.shape_height_mm
+        ),
+    )
+
+    return combine_meshes(base, raised_shape)
+
+
+def build_hinge_mesh(
+    parameters: TileParameters,
+) -> MeshData:
+    base = square_tile_base(parameters)
+
+    barrel_length = parameters.shape_width_mm
+    barrel_radius = max(
+        2.0,
+        parameters.shape_height_mm / 2.0,
+    )
+    barrel_center_z = (
+        parameters.tile_height_mm
+        + barrel_radius
+    )
+
+    segments = max(24, parameters.circle_segments)
+
+    barrel = transform_mesh(
+        cylinder_mesh(
+            radius_mm=barrel_radius,
+            length_mm=barrel_length,
+            segments=segments,
+            axis="Y",
+        ),
+        translate_z_mm=barrel_center_z,
+    )
+
+    knuckle_length = barrel_length * 0.18
+    knuckle_radius = barrel_radius * 1.15
+
+    knuckles: list[MeshData] = []
+
+    for y_offset in (
+        -barrel_length * 0.32,
+        0.0,
+        barrel_length * 0.32,
+    ):
+        knuckles.append(
+            transform_mesh(
+                cylinder_mesh(
+                    radius_mm=knuckle_radius,
+                    length_mm=knuckle_length,
+                    segments=segments,
+                    axis="Y",
+                ),
+                translate_y_mm=y_offset,
+                translate_z_mm=barrel_center_z,
+            )
+        )
+
+    pin = transform_mesh(
+        cylinder_mesh(
+            radius_mm=barrel_radius * 0.32,
+            length_mm=barrel_length * 1.08,
+            segments=segments,
+            axis="Y",
+        ),
+        translate_z_mm=barrel_center_z,
+    )
+
+    leaf_width = barrel_radius * 2.2
+    leaf_depth = barrel_length * 0.76
+    leaf_height = max(1.0, parameters.shape_height_mm * 0.22)
+
+    left_leaf = transform_mesh(
+        rectangular_prism(
+            width_mm=leaf_width,
+            depth_mm=leaf_depth,
+            height_mm=leaf_height,
+        ),
+        translate_x_mm=-(barrel_radius + leaf_width / 2.0),
+        translate_z_mm=parameters.tile_height_mm,
+    )
+
+    right_leaf = transform_mesh(
+        rectangular_prism(
+            width_mm=leaf_width,
+            depth_mm=leaf_depth,
+            height_mm=leaf_height,
+        ),
+        translate_x_mm=barrel_radius + leaf_width / 2.0,
+        translate_z_mm=parameters.tile_height_mm,
+    )
+
+    return combine_meshes(
+        base,
+        left_leaf,
+        right_leaf,
+        barrel,
+        *knuckles,
+        pin,
+    )
+
+
+def build_fold_mesh(
+    parameters: TileParameters,
+) -> MeshData:
+    base = square_tile_base(parameters)
+
+    panel_width = parameters.shape_width_mm
+    panel_height = min(
+        parameters.tile_depth_mm * 0.58,
+        parameters.shape_width_mm,
+    )
+    panel_thickness = max(
+        1.5,
+        parameters.shape_height_mm,
+    )
+    fold_angle_degrees = 58.0
+
+    panel = rectangular_prism(
+        width_mm=panel_width,
+        depth_mm=panel_thickness,
+        height_mm=panel_height,
+    )
+
+    angle = math.radians(fold_angle_degrees)
+
+    panel = transform_mesh(
+        panel,
+        rotate_x_degrees=fold_angle_degrees,
+        translate_y_mm=(
+            math.sin(angle) * panel_height * 0.05
+        ),
+        translate_z_mm=(
+            parameters.tile_height_mm
+            + math.sin(angle) * panel_thickness / 2.0
+        ),
+    )
+
+    foot = transform_mesh(
+        rectangular_prism(
+            width_mm=panel_width * 1.08,
+            depth_mm=panel_thickness * 2.4,
+            height_mm=max(1.5, panel_thickness * 0.55),
+        ),
+        translate_y_mm=-(panel_thickness * 0.45),
+        translate_z_mm=parameters.tile_height_mm,
+    )
+
+    return combine_meshes(
+        base,
+        foot,
+        panel,
+    )
+
+
+def square_circle_ring_mesh(
+    *,
+    tile_width_mm: float,
+    tile_depth_mm: float,
+    hole_radius_mm: float,
+    height_mm: float,
+    segments: int,
+) -> MeshData:
+    if segments < 24:
+        raise ValueError(
+            "Aperture requires at least 24 segments."
+        )
+
+    half_width = tile_width_mm / 2.0
+    half_depth = tile_depth_mm / 2.0
+
+    inner_bottom: list[Point3D] = []
+    outer_bottom: list[Point3D] = []
+    inner_top: list[Point3D] = []
+    outer_top: list[Point3D] = []
+
+    for index in range(segments):
+        angle = index * 2.0 * math.pi / segments
+        cosine = math.cos(angle)
+        sine = math.sin(angle)
+
+        inner_x = hole_radius_mm * cosine
+        inner_y = hole_radius_mm * sine
+
+        square_scale = min(
+            half_width / max(abs(cosine), 1e-9),
+            half_depth / max(abs(sine), 1e-9),
+        )
+
+        outer_x = cosine * square_scale
+        outer_y = sine * square_scale
+
+        inner_bottom.append((inner_x, inner_y, 0.0))
+        outer_bottom.append((outer_x, outer_y, 0.0))
+        inner_top.append((inner_x, inner_y, height_mm))
+        outer_top.append((outer_x, outer_y, height_mm))
+
+    vertices = tuple(
+        inner_bottom
+        + outer_bottom
+        + inner_top
+        + outer_top
+    )
+
+    inner_bottom_offset = 0
+    outer_bottom_offset = segments
+    inner_top_offset = segments * 2
+    outer_top_offset = segments * 3
+
+    faces: list[tuple[int, ...]] = []
+
+    for index in range(segments):
+        next_index = (index + 1) % segments
+
+        ib = inner_bottom_offset + index
+        ibn = inner_bottom_offset + next_index
+        ob = outer_bottom_offset + index
+        obn = outer_bottom_offset + next_index
+
+        it = inner_top_offset + index
+        itn = inner_top_offset + next_index
+        ot = outer_top_offset + index
+        otn = outer_top_offset + next_index
+
+        faces.append((ob, obn, ibn, ib))
+        faces.append((it, itn, otn, ot))
+        faces.append((ob, ot, otn, obn))
+        faces.append((ibn, itn, it, ib))
+
+    result = MeshData(
+        vertices=vertices,
+        faces=tuple(faces),
+    )
+    result.validate()
+    return result
+
+
+def build_aperture_mesh(
+    parameters: TileParameters,
+) -> MeshData:
+    hole_radius = parameters.shape_width_mm / 2.0
+
+    minimum_border = min(
+        parameters.tile_width_mm,
+        parameters.tile_depth_mm,
+    ) * 0.08
+
+    maximum_radius = (
+        min(
+            parameters.tile_width_mm,
+            parameters.tile_depth_mm,
+        )
+        / 2.0
+        - minimum_border
+    )
+
+    if hole_radius > maximum_radius:
+        raise ValueError(
+            "The aperture leaves too little material around the tile."
+        )
+
+    return square_circle_ring_mesh(
+        tile_width_mm=parameters.tile_width_mm,
+        tile_depth_mm=parameters.tile_depth_mm,
+        hole_radius_mm=hole_radius,
+        height_mm=parameters.tile_height_mm,
+        segments=parameters.circle_segments,
+    )
+
+
+def spherical_cap_mesh(
+    *,
+    radius_mm: float,
+    rise_mm: float,
+    base_z_mm: float,
+    radial_segments: int,
+    ring_segments: int = 12,
+) -> MeshData:
+    if rise_mm <= 0:
+        raise ValueError("Lens rise must be greater than zero.")
+
+    if rise_mm > radius_mm:
+        raise ValueError(
+            "Lens rise cannot exceed its base radius."
+        )
+
+    sphere_radius = (
+        radius_mm * radius_mm + rise_mm * rise_mm
+    ) / (2.0 * rise_mm)
+
+    sphere_center_z = (
+        base_z_mm + rise_mm - sphere_radius
+    )
+
+    vertices: list[Point3D] = []
+    faces: list[tuple[int, ...]] = []
+
+    for ring_index in range(ring_segments):
+        fraction = ring_index / ring_segments
+        z = base_z_mm + fraction * rise_mm
+
+        relative_z = z - sphere_center_z
+        ring_radius = math.sqrt(
+            max(
+                0.0,
+                sphere_radius * sphere_radius
+                - relative_z * relative_z,
+            )
+        )
+
+        for radial_index in range(radial_segments):
+            angle = (
+                radial_index
+                * 2.0
+                * math.pi
+                / radial_segments
+            )
+            vertices.append(
+                (
+                    ring_radius * math.cos(angle),
+                    ring_radius * math.sin(angle),
+                    z,
+                )
+            )
+
+    apex_index = len(vertices)
+    vertices.append((0.0, 0.0, base_z_mm + rise_mm))
+
+    for ring_index in range(ring_segments - 1):
+        current_offset = ring_index * radial_segments
+        next_offset = (ring_index + 1) * radial_segments
+
+        for radial_index in range(radial_segments):
+            next_radial = (
+                radial_index + 1
+            ) % radial_segments
+
+            faces.append(
+                (
+                    current_offset + radial_index,
+                    current_offset + next_radial,
+                    next_offset + next_radial,
+                    next_offset + radial_index,
+                )
+            )
+
+    final_ring_offset = (
+        ring_segments - 1
+    ) * radial_segments
+
+    for radial_index in range(radial_segments):
+        next_radial = (
+            radial_index + 1
+        ) % radial_segments
+
+        faces.append(
+            (
+                final_ring_offset + radial_index,
+                final_ring_offset + next_radial,
+                apex_index,
+            )
+        )
+
+    faces.append(
+        tuple(
+            reversed(range(radial_segments))
+        )
+    )
+
+    result = MeshData(
+        vertices=tuple(vertices),
+        faces=tuple(faces),
+    )
+    result.validate()
+    return result
+
+
+def build_lens_mesh(
+    parameters: TileParameters,
+) -> MeshData:
+    base = square_tile_base(parameters)
+
+    lens_radius = parameters.shape_width_mm / 2.0
+    lens_rise = min(
+        parameters.shape_height_mm,
+        lens_radius,
+    )
+
+    mount_height = max(1.0, lens_rise * 0.25)
+
+    mount = transform_mesh(
+        cylinder_mesh(
+            radius_mm=lens_radius * 1.08,
+            length_mm=mount_height,
+            segments=parameters.circle_segments,
+            axis="Z",
+        ),
+        translate_z_mm=parameters.tile_height_mm,
+    )
+
+    lens = spherical_cap_mesh(
+        radius_mm=lens_radius,
+        rise_mm=lens_rise,
+        base_z_mm=parameters.tile_height_mm + mount_height,
+        radial_segments=parameters.circle_segments,
+    )
+
+    return combine_meshes(
+        base,
+        mount,
+        lens,
+    )
+
+
+def build_mirror_mesh(
+    parameters: TileParameters,
+) -> MeshData:
+    base = square_tile_base(parameters)
+
+    mirror_width = parameters.shape_width_mm
+    mirror_depth = mirror_width
+    mirror_thickness = max(
+        0.8,
+        parameters.shape_height_mm * 0.28,
+    )
+
+    frame_width = max(
+        2.0,
+        mirror_width * 0.07,
+    )
+    frame_height = max(
+        1.5,
+        parameters.shape_height_mm * 0.55,
+    )
+
+    mirror = transform_mesh(
+        rectangular_prism(
+            width_mm=mirror_width,
+            depth_mm=mirror_depth,
+            height_mm=mirror_thickness,
+        ),
+        translate_z_mm=(
+            parameters.tile_height_mm
+            + frame_height
+        ),
+    )
+
+    outer_width = mirror_width + frame_width * 2.0
+    outer_depth = mirror_depth + frame_width * 2.0
+
+    top_frame = transform_mesh(
+        rectangular_prism(
+            width_mm=outer_width,
+            depth_mm=frame_width,
+            height_mm=frame_height,
+        ),
+        translate_y_mm=(
+            mirror_depth / 2.0
+            + frame_width / 2.0
+        ),
+        translate_z_mm=parameters.tile_height_mm,
+    )
+
+    bottom_frame = transform_mesh(
+        rectangular_prism(
+            width_mm=outer_width,
+            depth_mm=frame_width,
+            height_mm=frame_height,
+        ),
+        translate_y_mm=-(
+            mirror_depth / 2.0
+            + frame_width / 2.0
+        ),
+        translate_z_mm=parameters.tile_height_mm,
+    )
+
+    left_frame = transform_mesh(
+        rectangular_prism(
+            width_mm=frame_width,
+            depth_mm=mirror_depth,
+            height_mm=frame_height,
+        ),
+        translate_x_mm=-(
+            mirror_width / 2.0
+            + frame_width / 2.0
+        ),
+        translate_z_mm=parameters.tile_height_mm,
+    )
+
+    right_frame = transform_mesh(
+        rectangular_prism(
+            width_mm=frame_width,
+            depth_mm=mirror_depth,
+            height_mm=frame_height,
+        ),
+        translate_x_mm=(
+            mirror_width / 2.0
+            + frame_width / 2.0
+        ),
+        translate_z_mm=parameters.tile_height_mm,
+    )
+
+    return combine_meshes(
+        base,
+        mirror,
+        top_frame,
+        bottom_frame,
+        left_frame,
+        right_frame,
+    )
+
+
+def build_tile_mesh(
+    parameters: TileParameters,
+) -> MeshData:
+    parameters.validate()
+
+    if parameters.shape in RAISED_SHAPES:
+        return build_raised_tile_mesh(parameters)
+
+    if parameters.shape is ShapeType.HINGE:
+        return build_hinge_mesh(parameters)
+
+    if parameters.shape is ShapeType.FOLD:
+        return build_fold_mesh(parameters)
+
+    if parameters.shape is ShapeType.APERTURE:
+        return build_aperture_mesh(parameters)
+
+    if parameters.shape is ShapeType.LENS:
+        return build_lens_mesh(parameters)
+
+    if parameters.shape is ShapeType.MIRROR:
+        return build_mirror_mesh(parameters)
+
+    raise ValueError(
+        f"Unsupported operational primitive: {parameters.shape}"
+    )
+PY
+
+cat > owde_addon/blender/properties.py <<'PY'
+import bpy
+
+
+class OWDE_PG_settings(bpy.types.PropertyGroup):
+    shape: bpy.props.EnumProperty(
+        name="Primitive",
+        description="Operational primitive to generate",
+        items=(
+            (
+                "CIRCLE",
+                "01 Raised Circle",
+                "Establishes a distinct central zone",
+            ),
+            (
+                "TRIANGLE",
+                "02 Raised Triangle",
+                "Introduces directionality",
+            ),
+            (
+                "SQUARE",
+                "03 Raised Square",
+                "Creates stable territory",
+            ),
+            (
+                "HEXAGON",
+                "04 Raised Hexagon",
+                "Introduces six-directional adjacency",
+            ),
+            (
+                "HINGE",
+                "06 Hinge",
+                "Enables rotation and connects two states",
+            ),
+            (
+                "FOLD",
+                "07 Fold",
+                "Changes plane and creates inside and outside",
+            ),
+            (
+                "APERTURE",
+                "08 Aperture",
+                "Removes material to create visibility or passage",
+            ),
+            (
+                "LENS",
+                "09 Lens",
+                "Focuses or distorts perception",
+            ),
+            (
+                "MIRROR",
+                "10 Mirror",
+                "Reflects and creates virtual depth",
+            ),
+        ),
+        default="CIRCLE",
+    )
+
+    tile_width_mm: bpy.props.FloatProperty(
+        name="Tile Width",
+        description="Width of the tile in millimeters",
+        default=100.0,
+        min=10.0,
+    )
+
+    tile_depth_mm: bpy.props.FloatProperty(
+        name="Tile Depth",
+        description="Depth of the tile in millimeters",
+        default=100.0,
+        min=10.0,
+    )
+
+    tile_height_mm: bpy.props.FloatProperty(
+        name="Tile Height",
+        description="Height of the tile base in millimeters",
+        default=8.0,
+        min=1.0,
+    )
+
+    shape_width_mm: bpy.props.FloatProperty(
+        name="Feature Width",
+        description=(
+            "Primary width or diameter of the operational feature"
+        ),
+        default=55.0,
+        min=1.0,
+    )
+
+    shape_height_mm: bpy.props.FloatProperty(
+        name="Feature Height",
+        description=(
+            "Height, thickness, diameter, or rise of the feature"
+        ),
+        default=5.0,
+        min=0.5,
+    )
+
+    bevel_mm: bpy.props.FloatProperty(
+        name="Bevel",
+        description="Reserved bevel dimension in millimeters",
+        default=1.0,
+        min=0.0,
+    )
+
+    circle_segments: bpy.props.IntProperty(
+        name="Radial Resolution",
+        description=(
+            "Number of segments used for circular geometry"
+        ),
+        default=64,
+        min=24,
+        max=256,
+    )
+
+    gallery_gap_mm: bpy.props.FloatProperty(
+        name="Gap Between Tiles",
+        description="Empty space between adjacent gallery tiles",
+        default=20.0,
+        min=0.0,
+    )
+
+    gallery_clear_existing: bpy.props.BoolProperty(
+        name="Replace Existing Gallery",
+        description=(
+            "Delete the previous generated gallery before "
+            "creating a new one"
+        ),
+        default=True,
+    )
+PY
+
+cat > owde_addon/blender/operators.py <<'PY'
+from __future__ import annotations
+
+import bpy
+
+from ..core import ShapeType, TileParameters, build_tile_mesh
+from .adapter import create_blender_object
+
+
+MM_TO_METERS = 0.001
+GALLERY_COLLECTION_NAME = "OWDE Primitive Gallery"
+OWDE_VERSION = "0.3.0-alpha.1"
+
+GALLERY_SHAPES = (
+    ShapeType.CIRCLE,
+    ShapeType.TRIANGLE,
+    ShapeType.SQUARE,
+    ShapeType.HEXAGON,
+    ShapeType.HINGE,
+    ShapeType.FOLD,
+    ShapeType.APERTURE,
+    ShapeType.LENS,
+    ShapeType.MIRROR,
+)
+
+PRIMITIVE_DEFINITIONS = {
+    ShapeType.CIRCLE: {
+        "id": "PRIM-0001",
+        "name": "Raised Circle",
+        "description": (
+            "A raised circular region introducing centrality."
+        ),
+        "capabilities": (
+            "Center",
+            "Zone",
+            "Radius",
+            "Boundary",
+            "Reference Point",
+        ),
+    },
+    ShapeType.TRIANGLE: {
+        "id": "PRIM-0002",
+        "name": "Raised Triangle",
+        "description": (
+            "A raised triangular region introducing direction, "
+            "orientation, and convergence."
+        ),
+        "capabilities": (
+            "Direction",
+            "Orientation",
+            "Point",
+            "Edge",
+            "Convergence",
+        ),
+    },
+    ShapeType.SQUARE: {
+        "id": "PRIM-0003",
+        "name": "Raised Square",
+        "description": (
+            "A raised orthogonal region introducing enclosure, "
+            "alignment, and stable orientation."
+        ),
+        "capabilities": (
+            "Zone",
+            "Boundary",
+            "Alignment",
+            "Corner",
+            "Orthogonal Orientation",
+        ),
+    },
+    ShapeType.HEXAGON: {
+        "id": "PRIM-0004",
+        "name": "Raised Hexagon",
+        "description": (
+            "A raised six-sided region introducing adjacency, "
+            "cell structure, and distributed orientation."
+        ),
+        "capabilities": (
+            "Cell",
+            "Adjacency",
+            "Zone",
+            "Boundary",
+            "Distributed Orientation",
+        ),
+    },
+    ShapeType.HINGE: {
+        "id": "PRIM-0006",
+        "name": "Hinge",
+        "description": (
+            "A rotational joint connecting two spatial states."
+        ),
+        "capabilities": (
+            "Rotation",
+            "Connection",
+            "Articulation",
+            "State Change",
+            "Axis",
+        ),
+    },
+    ShapeType.FOLD: {
+        "id": "PRIM-0007",
+        "name": "Fold",
+        "description": (
+            "A planar displacement producing an inside, outside, "
+            "and directional change."
+        ),
+        "capabilities": (
+            "Plane Change",
+            "Inside",
+            "Outside",
+            "Crease",
+            "Orientation",
+        ),
+    },
+    ShapeType.APERTURE: {
+        "id": "PRIM-0008",
+        "name": "Aperture",
+        "description": (
+            "An opening created by removing material from a surface."
+        ),
+        "capabilities": (
+            "Opening",
+            "Passage",
+            "Visibility",
+            "Framing",
+            "Permeability",
+        ),
+    },
+    ShapeType.LENS: {
+        "id": "PRIM-0009",
+        "name": "Lens",
+        "description": (
+            "A convex perceptual surface that focuses or distorts."
+        ),
+        "capabilities": (
+            "Focus",
+            "Distortion",
+            "Magnification",
+            "Perception",
+            "Refraction",
+        ),
+    },
+    ShapeType.MIRROR: {
+        "id": "PRIM-0010",
+        "name": "Mirror",
+        "description": (
+            "A reflective surface creating a virtual spatial depth."
+        ),
+        "capabilities": (
+            "Reflection",
+            "Duplication",
+            "Virtual Depth",
+            "Reversal",
+            "Self-Observation",
+        ),
+    },
+}
+
+
+def parameters_from_settings(
+    settings,
+    shape: ShapeType,
+) -> TileParameters:
+    return TileParameters(
+        shape=shape,
+        tile_width_mm=settings.tile_width_mm,
+        tile_depth_mm=settings.tile_depth_mm,
+        tile_height_mm=settings.tile_height_mm,
+        shape_width_mm=settings.shape_width_mm,
+        shape_height_mm=settings.shape_height_mm,
+        bevel_mm=settings.bevel_mm,
+        circle_segments=settings.circle_segments,
+    )
+
+
+def attach_metadata(
+    object_: bpy.types.Object,
+    parameters: TileParameters,
+    primitive_index: int | None = None,
+) -> None:
+    definition = PRIMITIVE_DEFINITIONS[parameters.shape]
+
+    object_["owde_object"] = True
+    object_["owde_primitive_id"] = definition["id"]
+    object_["owde_primitive_name"] = definition["name"]
+    object_["owde_description"] = definition["description"]
+    object_["owde_capabilities"] = "|".join(
+        definition["capabilities"]
+    )
+
+    object_["owde_shape"] = parameters.shape.value
+    object_["owde_version"] = OWDE_VERSION
+
+    object_["owde_tile_width_mm"] = parameters.tile_width_mm
+    object_["owde_tile_depth_mm"] = parameters.tile_depth_mm
+    object_["owde_tile_height_mm"] = parameters.tile_height_mm
+
+    object_["owde_shape_width_mm"] = parameters.shape_width_mm
+    object_["owde_shape_height_mm"] = parameters.shape_height_mm
+    object_["owde_bevel_mm"] = parameters.bevel_mm
+    object_["owde_circle_segments"] = parameters.circle_segments
+
+    if primitive_index is not None:
+        object_["owde_gallery_index"] = primitive_index
+
+
+def get_or_create_gallery_collection(
+    context: bpy.types.Context,
+) -> bpy.types.Collection:
+    collection = bpy.data.collections.get(
+        GALLERY_COLLECTION_NAME
+    )
+
+    if collection is None:
+        collection = bpy.data.collections.new(
+            GALLERY_COLLECTION_NAME
+        )
+        context.scene.collection.children.link(collection)
+
+    return collection
+
+
+def clear_gallery_collection(
+    collection: bpy.types.Collection,
+) -> None:
+    for object_ in list(collection.objects):
+        bpy.data.objects.remove(
+            object_,
+            do_unlink=True,
+        )
+
+
+def move_object_to_collection(
+    object_: bpy.types.Object,
+    collection: bpy.types.Collection,
+) -> None:
+    for current_collection in list(
+        object_.users_collection
+    ):
+        current_collection.objects.unlink(object_)
+
+    collection.objects.link(object_)
+
+
+def deselect_all_objects() -> None:
+    for object_ in bpy.context.selected_objects:
+        object_.select_set(False)
+
+
+class OWDE_OT_create_tile(bpy.types.Operator):
+    bl_idname = "owde.create_tile"
+    bl_label = "Create Operational Tile"
+    bl_description = (
+        "Create one parametric Operational Worlds primitive"
+    )
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context: bpy.types.Context):
+        settings = context.scene.owde_settings
+
+        parameters = parameters_from_settings(
+            settings,
+            ShapeType(settings.shape),
+        )
+
+        try:
+            mesh_data = build_tile_mesh(parameters)
+        except ValueError as error:
+            self.report({"ERROR"}, str(error))
+            return {"CANCELLED"}
+
+        deselect_all_objects()
+
+        definition = PRIMITIVE_DEFINITIONS[
+            parameters.shape
+        ]
+
+        object_ = create_blender_object(
+            name=(
+                f"{definition['id']}_"
+                f"{definition['name'].replace(' ', '_')}"
+            ),
+            mesh_data=mesh_data,
+        )
+
+        attach_metadata(
+            object_,
+            parameters,
+        )
+
+        object_.select_set(True)
+        context.view_layer.objects.active = object_
+
+        self.report(
+            {"INFO"},
+            f"Created {definition['name']}",
+        )
+
+        return {"FINISHED"}
+
+
+class OWDE_OT_create_primitive_gallery(
+    bpy.types.Operator
+):
+    bl_idname = "owde.create_primitive_gallery"
+    bl_label = "Create Primitive Gallery"
+    bl_description = (
+        "Create all currently implemented Operational Worlds "
+        "primitives in an evenly spaced gallery"
+    )
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context: bpy.types.Context):
+        settings = context.scene.owde_settings
+
+        try:
+            parameter_sets = [
+                parameters_from_settings(settings, shape)
+                for shape in GALLERY_SHAPES
+            ]
+
+            meshes = [
+                build_tile_mesh(parameters)
+                for parameters in parameter_sets
+            ]
+        except ValueError as error:
+            self.report({"ERROR"}, str(error))
+            return {"CANCELLED"}
+
+        gallery_collection = (
+            get_or_create_gallery_collection(context)
+        )
+
+        if settings.gallery_clear_existing:
+            clear_gallery_collection(
+                gallery_collection
+            )
+
+        deselect_all_objects()
+
+        center_distance_mm = (
+            settings.tile_width_mm
+            + settings.gallery_gap_mm
+        )
+
+        column_count = 3
+        row_count = (
+            len(GALLERY_SHAPES)
+            + column_count
+            - 1
+        ) // column_count
+
+        gallery_width_mm = (
+            center_distance_mm
+            * (column_count - 1)
+        )
+
+        gallery_depth_mm = (
+            center_distance_mm
+            * (row_count - 1)
+        )
+
+        starting_x_mm = -gallery_width_mm / 2.0
+        starting_y_mm = gallery_depth_mm / 2.0
+
+        created_objects: list[
+            bpy.types.Object
+        ] = []
+
+        for index, (parameters, mesh_data) in enumerate(
+            zip(parameter_sets, meshes)
+        ):
+            definition = PRIMITIVE_DEFINITIONS[
+                parameters.shape
+            ]
+
+            object_name = (
+                f"{definition['id']}_Gallery_"
+                f"{definition['name'].replace(' ', '_')}"
+            )
+
+            object_ = create_blender_object(
+                name=object_name,
+                mesh_data=mesh_data,
+            )
+
+            move_object_to_collection(
+                object_,
+                gallery_collection,
+            )
+
+            column = index % column_count
+            row = index // column_count
+
+            object_.location.x = (
+                starting_x_mm
+                + column * center_distance_mm
+            ) * MM_TO_METERS
+
+            object_.location.y = (
+                starting_y_mm
+                - row * center_distance_mm
+            ) * MM_TO_METERS
+
+            object_.location.z = 0.0
+
+            attach_metadata(
+                object_,
+                parameters,
+                primitive_index=index + 1,
+            )
+
+            created_objects.append(object_)
+
+        deselect_all_objects()
+
+        for object_ in created_objects:
+            object_.select_set(True)
+
+        if created_objects:
+            context.view_layer.objects.active = (
+                created_objects[0]
+            )
+
+        self.report(
+            {"INFO"},
+            (
+                "Created gallery with "
+                f"{len(created_objects)} operational primitives"
+            ),
+        )
+
+        return {"FINISHED"}
+
+
+class OWDE_OT_frame_primitive_gallery(
+    bpy.types.Operator
+):
+    bl_idname = "owde.frame_primitive_gallery"
+    bl_label = "Frame Gallery"
+    bl_description = (
+        "Select and frame all objects in the primitive gallery"
+    )
+    bl_options = {"REGISTER"}
+
+    def execute(self, context: bpy.types.Context):
+        collection = bpy.data.collections.get(
+            GALLERY_COLLECTION_NAME
+        )
+
+        if collection is None or not collection.objects:
+            self.report(
+                {"WARNING"},
+                "No primitive gallery has been created",
+            )
+            return {"CANCELLED"}
+
+        deselect_all_objects()
+
+        visible_objects = [
+            object_
+            for object_ in collection.objects
+            if not object_.hide_viewport
+        ]
+
+        if not visible_objects:
+            self.report(
+                {"WARNING"},
+                (
+                    "The primitive gallery contains "
+                    "no visible objects"
+                ),
+            )
+            return {"CANCELLED"}
+
+        for object_ in visible_objects:
+            object_.select_set(True)
+
+        context.view_layer.objects.active = (
+            visible_objects[0]
+        )
+
+        try:
+            bpy.ops.view3d.view_selected(
+                use_all_regions=False
+            )
+        except RuntimeError:
+            self.report(
+                {"INFO"},
+                (
+                    "Gallery selected. "
+                    "Press Home to frame it."
+                ),
+            )
+
+        return {"FINISHED"}
+PY
+
+cat > owde_addon/blender/panel.py <<'PY'
+from __future__ import annotations
+
+import bpy
+
+
+CIRCULAR_PRIMITIVES = {
+    "CIRCLE",
+    "HINGE",
+    "APERTURE",
+    "LENS",
+}
+
+
+def draw_dimension(
+    layout,
+    label: str,
+    value,
+    unit: str = "mm",
+) -> None:
+    if value is None:
+        layout.label(text=f"{label}: -")
+    else:
+        layout.label(
+            text=f"{label}: {value:g} {unit}"
+        )
+
+
+class OWDE_PT_tile_builder(bpy.types.Panel):
+    bl_label = "Operational Tile Builder"
+    bl_idname = "OWDE_PT_tile_builder"
+    bl_space_type = "VIEW_3D"
+    bl_region_type = "UI"
+    bl_category = "Operational Worlds"
+
+    def draw(
+        self,
+        context: bpy.types.Context,
+    ) -> None:
+        layout = self.layout
+        settings = context.scene.owde_settings
+
+        single_box = layout.box()
+        single_box.label(
+            text="Single Primitive",
+            icon="MESH_CIRCLE",
+        )
+        single_box.prop(settings, "shape")
+
+        tile_box = layout.box()
+        tile_box.label(text="Tile Dimensions")
+        tile_box.prop(settings, "tile_width_mm")
+        tile_box.prop(settings, "tile_depth_mm")
+        tile_box.prop(settings, "tile_height_mm")
+
+        feature_box = layout.box()
+        feature_box.label(
+            text="Operational Feature"
+        )
+        feature_box.prop(
+            settings,
+            "shape_width_mm",
+        )
+        feature_box.prop(
+            settings,
+            "shape_height_mm",
+        )
+
+        if settings.shape in CIRCULAR_PRIMITIVES:
+            feature_box.prop(
+                settings,
+                "circle_segments",
+            )
+
+        finish_box = layout.box()
+        finish_box.label(text="Finish")
+        finish_box.prop(settings, "bevel_mm")
+
+        layout.operator(
+            "owde.create_tile",
+            text="Create Selected Primitive",
+            icon="MESH_CUBE",
+        )
+
+        layout.separator()
+
+        gallery_box = layout.box()
+        gallery_box.label(
+            text="Primitive Gallery",
+            icon="OUTLINER_COLLECTION",
+        )
+
+        gallery_box.label(
+            text="OW01-OW04 and OW06-OW10"
+        )
+
+        gallery_box.prop(
+            settings,
+            "gallery_gap_mm",
+        )
+
+        gallery_box.prop(
+            settings,
+            "gallery_clear_existing",
+        )
+
+        gallery_box.operator(
+            "owde.create_primitive_gallery",
+            text="Create Primitive Gallery",
+            icon="GROUP",
+        )
+
+        gallery_box.operator(
+            "owde.frame_primitive_gallery",
+            text="Frame Gallery in View",
+            icon="VIEWZOOM",
+        )
+
+
+class OWDE_PT_primitive_inspector(
+    bpy.types.Panel
+):
+    bl_label = "Primitive Inspector"
+    bl_idname = "OWDE_PT_primitive_inspector"
+    bl_space_type = "VIEW_3D"
+    bl_region_type = "UI"
+    bl_category = "Operational Worlds"
+    bl_options = {"DEFAULT_CLOSED"}
+
+    @classmethod
+    def poll(
+        cls,
+        context: bpy.types.Context,
+    ) -> bool:
+        return context.active_object is not None
+
+    def draw(
+        self,
+        context: bpy.types.Context,
+    ) -> None:
+        layout = self.layout
+        object_ = context.active_object
+
+        if object_ is None:
+            layout.label(text="No active object.")
+            return
+
+        if not object_.get("owde_object", False):
+            info_box = layout.box()
+            info_box.label(
+                text=(
+                    "Selected object is not "
+                    "an OWDE primitive."
+                ),
+                icon="INFO",
+            )
+            info_box.label(
+                text="Select a generated primitive."
+            )
+            return
+
+        identity_box = layout.box()
+        identity_box.label(
+            text=object_.get(
+                "owde_primitive_id",
+                "Uncatalogued Primitive",
+            ),
+            icon="BOOKMARKS",
+        )
+
+        identity_box.label(
+            text=object_.get(
+                "owde_primitive_name",
+                object_.name,
+            )
+        )
+
+        shape_name = object_.get(
+            "owde_shape",
+            "unknown",
+        )
+
+        identity_box.label(
+            text=(
+                "Geometry Type: "
+                f"{shape_name.replace('_', ' ').title()}"
+            )
+        )
+
+        description = object_.get(
+            "owde_description",
+            "",
+        )
+
+        if description:
+            description_box = layout.box()
+            description_box.label(
+                text="Description"
+            )
+            description_box.label(
+                text=description
+            )
+
+        capability_box = layout.box()
+        capability_box.label(
+            text="Capabilities",
+            icon="OUTLINER_OB_LIGHT",
+        )
+
+        capabilities = object_.get(
+            "owde_capabilities",
+            "",
+        )
+
+        capability_items = [
+            item.strip()
+            for item in capabilities.split("|")
+            if item.strip()
+        ]
+
+        if capability_items:
+            for capability in capability_items:
+                row = capability_box.row()
+                row.label(
+                    text=capability,
+                    icon="DOT",
+                )
+        else:
+            capability_box.label(
+                text="No capabilities recorded."
+            )
+
+        geometry_box = layout.box()
+        geometry_box.label(
+            text="Geometry",
+            icon="MESH_DATA",
+        )
+
+        draw_dimension(
+            geometry_box,
+            "Tile Width",
+            object_.get("owde_tile_width_mm"),
+        )
+        draw_dimension(
+            geometry_box,
+            "Tile Depth",
+            object_.get("owde_tile_depth_mm"),
+        )
+        draw_dimension(
+            geometry_box,
+            "Tile Height",
+            object_.get("owde_tile_height_mm"),
+        )
+        draw_dimension(
+            geometry_box,
+            "Feature Width",
+            object_.get("owde_shape_width_mm"),
+        )
+        draw_dimension(
+            geometry_box,
+            "Feature Height",
+            object_.get("owde_shape_height_mm"),
+        )
+        draw_dimension(
+            geometry_box,
+            "Bevel",
+            object_.get("owde_bevel_mm"),
+        )
+
+        if shape_name in CIRCULAR_PRIMITIVES:
+            segments = object_.get(
+                "owde_circle_segments"
+            )
+            geometry_box.label(
+                text=f"Radial Segments: {segments}"
+            )
+
+        research_box = layout.box()
+        research_box.label(
+            text="Research Record",
+            icon="FILE_TEXT",
+        )
+
+        version = object_.get(
+            "owde_version",
+            "Unknown",
+        )
+        research_box.label(
+            text=f"OWDE Version: {version}"
+        )
+
+        gallery_index = object_.get(
+            "owde_gallery_index"
+        )
+
+        if gallery_index is not None:
+            research_box.label(
+                text=(
+                    "Gallery Position: "
+                    f"{gallery_index}"
+                )
+            )
+
+        object_box = layout.box()
+        object_box.label(
+            text="Blender Object",
+            icon="OBJECT_DATA",
+        )
+        object_box.label(
+            text=f"Name: {object_.name}"
+        )
+
+        if object_.type == "MESH":
+            mesh = object_.data
+            object_box.label(
+                text=f"Vertices: {len(mesh.vertices)}"
+            )
+            object_box.label(
+                text=f"Edges: {len(mesh.edges)}"
+            )
+            object_box.label(
+                text=f"Faces: {len(mesh.polygons)}"
+            )
+PY
+
+cat > tests/test_builders.py <<'PY'
+import pytest
+
+from owde_addon.core import (
+    ShapeType,
+    TileParameters,
+    build_tile_mesh,
+    shape_outline,
+)
+
+
+RAISED_SHAPES = (
+    ShapeType.CIRCLE,
+    ShapeType.TRIANGLE,
+    ShapeType.SQUARE,
+    ShapeType.HEXAGON,
+)
+
+COMPLEX_PRIMITIVES = (
+    ShapeType.HINGE,
+    ShapeType.FOLD,
+    ShapeType.APERTURE,
+    ShapeType.LENS,
+    ShapeType.MIRROR,
+)
+
+ALL_IMPLEMENTED_PRIMITIVES = (
+    *RAISED_SHAPES,
+    *COMPLEX_PRIMITIVES,
+)
+
+
+@pytest.mark.parametrize(
+    ("shape", "expected_points"),
+    (
+        (ShapeType.TRIANGLE, 3),
+        (ShapeType.SQUARE, 4),
+        (ShapeType.HEXAGON, 6),
+    ),
+)
+def test_polygon_outline_point_counts(
+    shape: ShapeType,
+    expected_points: int,
+) -> None:
+    parameters = TileParameters(shape=shape)
+
+    assert (
+        len(shape_outline(parameters))
+        == expected_points
+    )
+
+
+def test_circle_outline_uses_requested_resolution() -> None:
+    parameters = TileParameters(
+        shape=ShapeType.CIRCLE,
+        circle_segments=64,
+    )
+
+    assert len(shape_outline(parameters)) == 64
+
+
+@pytest.mark.parametrize(
+    "shape",
+    ALL_IMPLEMENTED_PRIMITIVES,
+)
+def test_each_primitive_builds_a_valid_mesh(
+    shape: ShapeType,
+) -> None:
+    mesh = build_tile_mesh(
+        TileParameters(shape=shape)
+    )
+
+    mesh.validate()
+
+    assert len(mesh.vertices) > 0
+    assert len(mesh.faces) > 0
+
+
+@pytest.mark.parametrize(
+    "shape",
+    (
+        ShapeType.CIRCLE,
+        ShapeType.TRIANGLE,
+        ShapeType.SQUARE,
+        ShapeType.HEXAGON,
+        ShapeType.HINGE,
+        ShapeType.FOLD,
+        ShapeType.LENS,
+        ShapeType.MIRROR,
+    ),
+)
+def test_solid_primitives_reach_above_tile(
+    shape: ShapeType,
+) -> None:
+    parameters = TileParameters(
+        shape=shape,
+        tile_height_mm=8.0,
+        shape_height_mm=5.0,
+    )
+
+    mesh = build_tile_mesh(parameters)
+
+    maximum_z = max(
+        vertex[2]
+        for vertex in mesh.vertices
+    )
+
+    assert maximum_z > parameters.tile_height_mm
+
+
+def test_aperture_does_not_add_geometry_above_tile() -> None:
+    parameters = TileParameters(
+        shape=ShapeType.APERTURE,
+        tile_height_mm=8.0,
+        shape_width_mm=40.0,
+    )
+
+    mesh = build_tile_mesh(parameters)
+
+    maximum_z = max(
+        vertex[2]
+        for vertex in mesh.vertices
+    )
+
+    assert maximum_z == pytest.approx(8.0)
+
+
+def test_aperture_contains_inner_circular_wall() -> None:
+    parameters = TileParameters(
+        shape=ShapeType.APERTURE,
+        shape_width_mm=40.0,
+        circle_segments=64,
+    )
+
+    mesh = build_tile_mesh(parameters)
+    expected_radius = 20.0
+
+    circular_vertices = [
+        vertex
+        for vertex in mesh.vertices
+        if (
+            vertex[0] ** 2
+            + vertex[1] ** 2
+        ) ** 0.5
+        == pytest.approx(expected_radius)
+    ]
+
+    assert len(circular_vertices) == 128
+
+
+def test_hexagon_has_horizontal_top_and_bottom_edges() -> None:
+    parameters = TileParameters(
+        shape=ShapeType.HEXAGON,
+        shape_width_mm=60.0,
+    )
+
+    points = shape_outline(parameters)
+
+    highest_y = max(y for _, y in points)
+    lowest_y = min(y for _, y in points)
+
+    top_points = [
+        point
+        for point in points
+        if point[1] == pytest.approx(highest_y)
+    ]
+
+    bottom_points = [
+        point
+        for point in points
+        if point[1] == pytest.approx(lowest_y)
+    ]
+
+    assert len(top_points) == 2
+    assert len(bottom_points) == 2
+
+    assert top_points[0][1] == pytest.approx(
+        top_points[1][1]
+    )
+
+    assert bottom_points[0][1] == pytest.approx(
+        bottom_points[1][1]
+    )
+
+
+def test_fold_creates_elevated_plane() -> None:
+    parameters = TileParameters(
+        shape=ShapeType.FOLD,
+        tile_height_mm=8.0,
+        shape_width_mm=55.0,
+        shape_height_mm=4.0,
+    )
+
+    mesh = build_tile_mesh(parameters)
+
+    maximum_z = max(
+        vertex[2]
+        for vertex in mesh.vertices
+    )
+
+    assert maximum_z > 30.0
+
+
+def test_lens_has_center_apex() -> None:
+    parameters = TileParameters(
+        shape=ShapeType.LENS,
+        tile_height_mm=8.0,
+        shape_width_mm=50.0,
+        shape_height_mm=8.0,
+    )
+
+    mesh = build_tile_mesh(parameters)
+
+    maximum_z = max(
+        vertex[2]
+        for vertex in mesh.vertices
+    )
+
+    apex_vertices = [
+        vertex
+        for vertex in mesh.vertices
+        if vertex[2] == pytest.approx(maximum_z)
+    ]
+
+    assert any(
+        vertex[0] == pytest.approx(0.0)
+        and vertex[1] == pytest.approx(0.0)
+        for vertex in apex_vertices
+    )
+
+
+def test_feature_must_fit_inside_tile() -> None:
+    parameters = TileParameters(
+        shape=ShapeType.MIRROR,
+        tile_width_mm=100.0,
+        tile_depth_mm=100.0,
+        shape_width_mm=100.0,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="must be smaller than the tile",
+    ):
+        build_tile_mesh(parameters)
+PY
+
+python3 -m pytest
+python3 scripts/build_addon.py

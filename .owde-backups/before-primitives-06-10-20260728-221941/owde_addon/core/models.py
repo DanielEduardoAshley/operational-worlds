@@ -10,31 +10,12 @@ class ShapeType(str, Enum):
     SQUARE = "SQUARE"
     HEXAGON = "HEXAGON"
 
-    HINGE = "HINGE"
-    FOLD = "FOLD"
-    APERTURE = "APERTURE"
-    LENS = "LENS"
-    MIRROR = "MIRROR"
-
 
 @dataclass(frozen=True, slots=True)
 class TileParameters:
     """Tool-independent parameters for one operational tile.
 
     All dimensions are expressed in millimeters.
-
-    For the original raised primitives:
-
-    - shape_width_mm controls the outline width.
-    - shape_height_mm controls the raised extrusion.
-
-    For OW06-OW10 these values become general feature dimensions:
-
-    - Hinge: barrel length and barrel diameter.
-    - Fold: panel width and panel thickness.
-    - Aperture: opening diameter.
-    - Lens: lens diameter and rise.
-    - Mirror: reflective surface width and thickness.
     """
 
     shape: ShapeType = ShapeType.CIRCLE
@@ -62,16 +43,11 @@ class TileParameters:
             if value <= 0:
                 raise ValueError(f"{name} must be greater than zero.")
 
-        maximum_feature_width = min(
+        if self.shape_width_mm > min(
             self.tile_width_mm,
             self.tile_depth_mm,
-        )
-
-        if self.shape_width_mm >= maximum_feature_width:
-            raise ValueError(
-                "The operational feature must be smaller than the tile "
-                "and fit within the tile."
-            )
+        ):
+            raise ValueError("The raised shape must fit within the tile.")
 
         if self.bevel_mm < 0:
             raise ValueError("bevel_mm cannot be negative.")

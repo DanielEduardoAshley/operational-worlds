@@ -3,14 +3,6 @@ from __future__ import annotations
 import bpy
 
 
-CIRCULAR_PRIMITIVES = {
-    "CIRCLE",
-    "HINGE",
-    "APERTURE",
-    "LENS",
-}
-
-
 def draw_dimension(
     layout,
     label: str,
@@ -20,9 +12,7 @@ def draw_dimension(
     if value is None:
         layout.label(text=f"{label}: -")
     else:
-        layout.label(
-            text=f"{label}: {value:g} {unit}"
-        )
+        layout.label(text=f"{label}: {value:g} {unit}")
 
 
 class OWDE_PT_tile_builder(bpy.types.Panel):
@@ -32,10 +22,7 @@ class OWDE_PT_tile_builder(bpy.types.Panel):
     bl_region_type = "UI"
     bl_category = "Operational Worlds"
 
-    def draw(
-        self,
-        context: bpy.types.Context,
-    ) -> None:
+    def draw(self, context: bpy.types.Context) -> None:
         layout = self.layout
         settings = context.scene.owde_settings
 
@@ -52,24 +39,13 @@ class OWDE_PT_tile_builder(bpy.types.Panel):
         tile_box.prop(settings, "tile_depth_mm")
         tile_box.prop(settings, "tile_height_mm")
 
-        feature_box = layout.box()
-        feature_box.label(
-            text="Operational Feature"
-        )
-        feature_box.prop(
-            settings,
-            "shape_width_mm",
-        )
-        feature_box.prop(
-            settings,
-            "shape_height_mm",
-        )
+        shape_box = layout.box()
+        shape_box.label(text="Raised Shape")
+        shape_box.prop(settings, "shape_width_mm")
+        shape_box.prop(settings, "shape_height_mm")
 
-        if settings.shape in CIRCULAR_PRIMITIVES:
-            feature_box.prop(
-                settings,
-                "circle_segments",
-            )
+        if settings.shape == "CIRCLE":
+            shape_box.prop(settings, "circle_segments")
 
         finish_box = layout.box()
         finish_box.label(text="Finish")
@@ -77,7 +53,7 @@ class OWDE_PT_tile_builder(bpy.types.Panel):
 
         layout.operator(
             "owde.create_tile",
-            text="Create Selected Primitive",
+            text="Create Selected Tile",
             icon="MESH_CUBE",
         )
 
@@ -90,7 +66,7 @@ class OWDE_PT_tile_builder(bpy.types.Panel):
         )
 
         gallery_box.label(
-            text="OW01-OW04 and OW06-OW10"
+            text="Circle / Triangle / Square / Hexagon"
         )
 
         gallery_box.prop(
@@ -116,9 +92,7 @@ class OWDE_PT_tile_builder(bpy.types.Panel):
         )
 
 
-class OWDE_PT_primitive_inspector(
-    bpy.types.Panel
-):
+class OWDE_PT_primitive_inspector(bpy.types.Panel):
     bl_label = "Primitive Inspector"
     bl_idname = "OWDE_PT_primitive_inspector"
     bl_space_type = "VIEW_3D"
@@ -147,10 +121,7 @@ class OWDE_PT_primitive_inspector(
         if not object_.get("owde_object", False):
             info_box = layout.box()
             info_box.label(
-                text=(
-                    "Selected object is not "
-                    "an OWDE primitive."
-                ),
+                text="Selected object is not an OWDE primitive.",
                 icon="INFO",
             )
             info_box.label(
@@ -174,31 +145,19 @@ class OWDE_PT_primitive_inspector(
             )
         )
 
-        shape_name = object_.get(
-            "owde_shape",
-            "unknown",
-        )
-
+        shape_name = object_.get("owde_shape", "unknown")
         identity_box.label(
-            text=(
-                "Geometry Type: "
-                f"{shape_name.replace('_', ' ').title()}"
-            )
+            text=f"Geometry Type: {shape_name.title()}"
         )
 
-        description = object_.get(
-            "owde_description",
-            "",
-        )
+        description = object_.get("owde_description", "")
 
         if description:
             description_box = layout.box()
-            description_box.label(
-                text="Description"
-            )
-            description_box.label(
-                text=description
-            )
+            description_box.label(text="Description")
+
+            for line in description.splitlines():
+                description_box.label(text=line)
 
         capability_box = layout.box()
         capability_box.label(
@@ -252,12 +211,12 @@ class OWDE_PT_primitive_inspector(
         )
         draw_dimension(
             geometry_box,
-            "Feature Width",
+            "Shape Width",
             object_.get("owde_shape_width_mm"),
         )
         draw_dimension(
             geometry_box,
-            "Feature Height",
+            "Shape Height",
             object_.get("owde_shape_height_mm"),
         )
         draw_dimension(
@@ -266,12 +225,12 @@ class OWDE_PT_primitive_inspector(
             object_.get("owde_bevel_mm"),
         )
 
-        if shape_name in CIRCULAR_PRIMITIVES:
+        if shape_name.upper() == "CIRCLE":
             segments = object_.get(
                 "owde_circle_segments"
             )
             geometry_box.label(
-                text=f"Radial Segments: {segments}"
+                text=f"Circle Segments: {segments}"
             )
 
         research_box = layout.box()
@@ -294,10 +253,7 @@ class OWDE_PT_primitive_inspector(
 
         if gallery_index is not None:
             research_box.label(
-                text=(
-                    "Gallery Position: "
-                    f"{gallery_index}"
-                )
+                text=f"Gallery Position: {gallery_index}"
             )
 
         object_box = layout.box()
