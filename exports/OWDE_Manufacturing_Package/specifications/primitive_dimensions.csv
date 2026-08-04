@@ -1,0 +1,16 @@
+primitive_id,primitive_name,shape_type,overall_width_mm,overall_depth_mm,overall_height_mm,tile_width_mm,tile_depth_mm,tile_height_mm,feature_width_mm,feature_height_mm,quantity,primary_material,finish,separate_component
+PRIM-0001,Raised Circle,CIRCLE,100.0,100.0,13.0,100.0,100.0,8.0,55.0,5.0,1,PLA or PETG,Matte,
+PRIM-0002,Raised Triangle,TRIANGLE,100.0,100.0,13.0,100.0,100.0,8.0,55.0,5.0,1,PLA or PETG,Matte,
+PRIM-0003,Raised Square,SQUARE,100.0,100.0,13.0,100.0,100.0,8.0,55.0,5.0,1,PLA or PETG,Matte,
+PRIM-0004,Raised Hexagon,HEXAGON,100.0,100.0,13.0,100.0,100.0,8.0,55.0,5.0,1,PLA or PETG,Matte,
+PRIM-0005,Slot,SLOT,100.0,100.0,9.1,100.0,100.0,8.0,55.0,5.0,1,PLA or PETG,Matte with dark insert,dark_slot_insert
+PRIM-0006,Hinge,HINGE,100.0,100.0,13.375,100.0,100.0,8.0,55.0,5.0,1,PETG preferred,Matte,
+PRIM-0007,Fold,FOLD,100.0,100.0,41.385800013608396,100.0,100.0,8.0,55.0,5.0,1,PLA or PETG,Matte,
+PRIM-0008,Aperture,APERTURE,100.0,100.0,8.0,100.0,100.0,8.0,55.0,5.0,1,PLA or PETG,Matte with dark insert,dark_aperture_insert
+PRIM-0009,Lens,LENS,100.0,100.0,13.6,100.0,100.0,8.0,55.0,5.0,1,Clear or translucent resin/PETG,Gloss or polished,
+PRIM-0010,Mirror,MIRROR,100.0,100.0,12.15,100.0,100.0,8.0,55.0,5.0,1,PLA/PETG frame,Matte frame with reflective insert,reflective_insert_template
+PRIM-0011,Light Source,LIGHT_SOURCE,100.0,100.0,12.15,100.0,100.0,8.0,55.0,5.0,1,PLA/PETG housing,Matte with translucent insert,translucent_light_insert
+PRIM-0012,Weight,WEIGHT,100.0,100.0,16.0,100.0,100.0,8.0,55.0,5.0,1,PETG or filled polymer,Matte,
+PRIM-0013,Threshold,THRESHOLD,100.0,100.0,13.0,100.0,100.0,8.0,55.0,5.0,1,PLA or PETG,Matte,
+PRIM-0014,Sensor,SENSOR,100.0,100.0,11.125,100.0,100.0,8.0,55.0,5.0,1,PLA/PETG housing,Matte with dark insert,dark_sensor_insert
+PRIM-0015,Handle,HANDLE,100.0,100.0,28.0,100.0,100.0,8.0,55.0,5.0,1,PETG preferred,Matte,

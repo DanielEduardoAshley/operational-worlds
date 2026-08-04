@@ -1,0 +1,641 @@
+{
+  "package_name": "OWDE Manufacturing Package",
+  "package_version": "0.1.0",
+  "generated_at_utc": "2026-08-04T00:52:59.264885+00:00",
+  "coordinate_units": "millimeters",
+  "stl_unit_warning": "STL does not encode units. Import every file as millimeters.",
+  "primitive_count": 15,
+  "quantity_per_primitive": 1,
+  "primitives": [
+    {
+      "primitive_id": "PRIM-0001",
+      "shape": "CIRCLE",
+      "name": "Raised Circle",
+      "filename_stem": "PRIM-0001_Raised_Circle",
+      "functional_intent": "Fixed raised form",
+      "material": "PLA or PETG",
+      "finish": "Matte",
+      "notes": "Visual and spatial primitive.",
+      "quantity": 1,
+      "units": "millimeters",
+      "stl_filepath": "stl/PRIM-0001_Raised_Circle.stl",
+      "dimensions": {
+        "minimum_x_mm": -50.0,
+        "maximum_x_mm": 50.0,
+        "minimum_y_mm": -50.0,
+        "maximum_y_mm": 50.0,
+        "minimum_z_mm": 0.0,
+        "maximum_z_mm": 13.0,
+        "overall_width_mm": 100.0,
+        "overall_depth_mm": 100.0,
+        "overall_height_mm": 13.0
+      },
+      "parameters": {
+        "tile_width_mm": 100.0,
+        "tile_depth_mm": 100.0,
+        "tile_height_mm": 8.0,
+        "shape_width_mm": 55.0,
+        "shape_height_mm": 5.0,
+        "circle_segments": 64
+      },
+      "component": null,
+      "validation_summary": {
+        "topologically_closed_by_edge_count": true,
+        "warning_count": 1
+      }
+    },
+    {
+      "primitive_id": "PRIM-0002",
+      "shape": "TRIANGLE",
+      "name": "Raised Triangle",
+      "filename_stem": "PRIM-0002_Raised_Triangle",
+      "functional_intent": "Fixed raised form",
+      "material": "PLA or PETG",
+      "finish": "Matte",
+      "notes": "Visual and directional primitive.",
+      "quantity": 1,
+      "units": "millimeters",
+      "stl_filepath": "stl/PRIM-0002_Raised_Triangle.stl",
+      "dimensions": {
+        "minimum_x_mm": -50.0,
+        "maximum_x_mm": 50.0,
+        "minimum_y_mm": -50.0,
+        "maximum_y_mm": 50.0,
+        "minimum_z_mm": 0.0,
+        "maximum_z_mm": 13.0,
+        "overall_width_mm": 100.0,
+        "overall_depth_mm": 100.0,
+        "overall_height_mm": 13.0
+      },
+      "parameters": {
+        "tile_width_mm": 100.0,
+        "tile_depth_mm": 100.0,
+        "tile_height_mm": 8.0,
+        "shape_width_mm": 55.0,
+        "shape_height_mm": 5.0,
+        "circle_segments": 64
+      },
+      "component": null,
+      "validation_summary": {
+        "topologically_closed_by_edge_count": true,
+        "warning_count": 1
+      }
+    },
+    {
+      "primitive_id": "PRIM-0003",
+      "shape": "SQUARE",
+      "name": "Raised Square",
+      "filename_stem": "PRIM-0003_Raised_Square",
+      "functional_intent": "Fixed raised form",
+      "material": "PLA or PETG",
+      "finish": "Matte",
+      "notes": "Visual and spatial primitive.",
+      "quantity": 1,
+      "units": "millimeters",
+      "stl_filepath": "stl/PRIM-0003_Raised_Square.stl",
+      "dimensions": {
+        "minimum_x_mm": -50.0,
+        "maximum_x_mm": 50.0,
+        "minimum_y_mm": -50.0,
+        "maximum_y_mm": 50.0,
+        "minimum_z_mm": 0.0,
+        "maximum_z_mm": 13.0,
+        "overall_width_mm": 100.0,
+        "overall_depth_mm": 100.0,
+        "overall_height_mm": 13.0
+      },
+      "parameters": {
+        "tile_width_mm": 100.0,
+        "tile_depth_mm": 100.0,
+        "tile_height_mm": 8.0,
+        "shape_width_mm": 55.0,
+        "shape_height_mm": 5.0,
+        "circle_segments": 64
+      },
+      "component": null,
+      "validation_summary": {
+        "topologically_closed_by_edge_count": true,
+        "warning_count": 1
+      }
+    },
+    {
+      "primitive_id": "PRIM-0004",
+      "shape": "HEXAGON",
+      "name": "Raised Hexagon",
+      "filename_stem": "PRIM-0004_Raised_Hexagon",
+      "functional_intent": "Fixed raised form",
+      "material": "PLA or PETG",
+      "finish": "Matte",
+      "notes": "Top and bottom hexagon sides remain parallel to tile edges.",
+      "quantity": 1,
+      "units": "millimeters",
+      "stl_filepath": "stl/PRIM-0004_Raised_Hexagon.stl",
+      "dimensions": {
+        "minimum_x_mm": -50.0,
+        "maximum_x_mm": 50.0,
+        "minimum_y_mm": -50.0,
+        "maximum_y_mm": 50.0,
+        "minimum_z_mm": 0.0,
+        "maximum_z_mm": 13.0,
+        "overall_width_mm": 100.0,
+        "overall_depth_mm": 100.0,
+        "overall_height_mm": 13.0
+      },
+      "parameters": {
+        "tile_width_mm": 100.0,
+        "tile_depth_mm": 100.0,
+        "tile_height_mm": 8.0,
+        "shape_width_mm": 55.0,
+        "shape_height_mm": 5.0,
+        "circle_segments": 64
+      },
+      "component": null,
+      "validation_summary": {
+        "topologically_closed_by_edge_count": true,
+        "warning_count": 1
+      }
+    },
+    {
+      "primitive_id": "PRIM-0005",
+      "shape": "SLOT",
+      "name": "Slot",
+      "filename_stem": "PRIM-0005_Slot",
+      "functional_intent": "Recessed visual channel",
+      "material": "PLA or PETG",
+      "finish": "Matte with dark insert",
+      "notes": "Separate dark capsule insert included.",
+      "quantity": 1,
+      "units": "millimeters",
+      "stl_filepath": "stl/PRIM-0005_Slot.stl",
+      "dimensions": {
+        "minimum_x_mm": -50.0,
+        "maximum_x_mm": 50.0,
+        "minimum_y_mm": -50.0,
+        "maximum_y_mm": 50.0,
+        "minimum_z_mm": 0.0,
+        "maximum_z_mm": 9.1,
+        "overall_width_mm": 100.0,
+        "overall_depth_mm": 100.0,
+        "overall_height_mm": 9.1
+      },
+      "parameters": {
+        "tile_width_mm": 100.0,
+        "tile_depth_mm": 100.0,
+        "tile_height_mm": 8.0,
+        "shape_width_mm": 55.0,
+        "shape_height_mm": 5.0,
+        "circle_segments": 64
+      },
+      "component": {
+        "name": "dark_slot_insert",
+        "material": "Matte black PLA or PETG",
+        "filepath": "components/PRIM-0005_Slot/dark_slot_insert.stl",
+        "dimensions": {
+          "minimum_x_mm": -27.5,
+          "maximum_x_mm": 27.5,
+          "minimum_y_mm": -6.0,
+          "maximum_y_mm": 6.0,
+          "minimum_z_mm": 0.0,
+          "maximum_z_mm": 1.2,
+          "overall_width_mm": 55.0,
+          "overall_depth_mm": 12.0,
+          "overall_height_mm": 1.2
+        }
+      },
+      "validation_summary": {
+        "topologically_closed_by_edge_count": true,
+        "warning_count": 1
+      }
+    },
+    {
+      "primitive_id": "PRIM-0006",
+      "shape": "HINGE",
+      "name": "Hinge",
+      "filename_stem": "PRIM-0006_Hinge",
+      "functional_intent": "Symbolic hinge prototype",
+      "material": "PETG preferred",
+      "finish": "Matte",
+      "notes": "Current geometry is not certified as a load-bearing moving hinge.",
+      "quantity": 1,
+      "units": "millimeters",
+      "stl_filepath": "stl/PRIM-0006_Hinge.stl",
+      "dimensions": {
+        "minimum_x_mm": -50.0,
+        "maximum_x_mm": 50.0,
+        "minimum_y_mm": -50.0,
+        "maximum_y_mm": 50.0,
+        "minimum_z_mm": 0.0,
+        "maximum_z_mm": 13.375,
+        "overall_width_mm": 100.0,
+        "overall_depth_mm": 100.0,
+        "overall_height_mm": 13.375
+      },
+      "parameters": {
+        "tile_width_mm": 100.0,
+        "tile_depth_mm": 100.0,
+        "tile_height_mm": 8.0,
+        "shape_width_mm": 55.0,
+        "shape_height_mm": 5.0,
+        "circle_segments": 64
+      },
+      "component": null,
+      "validation_summary": {
+        "topologically_closed_by_edge_count": true,
+        "warning_count": 1
+      }
+    },
+    {
+      "primitive_id": "PRIM-0007",
+      "shape": "FOLD",
+      "name": "Fold",
+      "filename_stem": "PRIM-0007_Fold",
+      "functional_intent": "Fixed elevated plane",
+      "material": "PLA or PETG",
+      "finish": "Matte",
+      "notes": "Support placement should avoid the primary presentation surface.",
+      "quantity": 1,
+      "units": "millimeters",
+      "stl_filepath": "stl/PRIM-0007_Fold.stl",
+      "dimensions": {
+        "minimum_x_mm": -50.0,
+        "maximum_x_mm": 50.0,
+        "minimum_y_mm": -50.0,
+        "maximum_y_mm": 50.0,
+        "minimum_z_mm": 0.0,
+        "maximum_z_mm": 41.385800013608396,
+        "overall_width_mm": 100.0,
+        "overall_depth_mm": 100.0,
+        "overall_height_mm": 41.385800013608396
+      },
+      "parameters": {
+        "tile_width_mm": 100.0,
+        "tile_depth_mm": 100.0,
+        "tile_height_mm": 8.0,
+        "shape_width_mm": 55.0,
+        "shape_height_mm": 5.0,
+        "circle_segments": 64
+      },
+      "component": null,
+      "validation_summary": {
+        "topologically_closed_by_edge_count": true,
+        "warning_count": 1
+      }
+    },
+    {
+      "primitive_id": "PRIM-0008",
+      "shape": "APERTURE",
+      "name": "Aperture",
+      "filename_stem": "PRIM-0008_Aperture",
+      "functional_intent": "Opening or simulated visual depth",
+      "material": "PLA or PETG",
+      "finish": "Matte with dark insert",
+      "notes": "Separate recessed circular backing insert included.",
+      "quantity": 1,
+      "units": "millimeters",
+      "stl_filepath": "stl/PRIM-0008_Aperture.stl",
+      "dimensions": {
+        "minimum_x_mm": -50.0,
+        "maximum_x_mm": 50.0,
+        "minimum_y_mm": -50.00000000000001,
+        "maximum_y_mm": 50.0,
+        "minimum_z_mm": 0.0,
+        "maximum_z_mm": 8.0,
+        "overall_width_mm": 100.0,
+        "overall_depth_mm": 100.0,
+        "overall_height_mm": 8.0
+      },
+      "parameters": {
+        "tile_width_mm": 100.0,
+        "tile_depth_mm": 100.0,
+        "tile_height_mm": 8.0,
+        "shape_width_mm": 55.0,
+        "shape_height_mm": 5.0,
+        "circle_segments": 64
+      },
+      "component": {
+        "name": "dark_aperture_insert",
+        "material": "Matte black PLA or PETG",
+        "filepath": "components/PRIM-0008_Aperture/dark_aperture_insert.stl",
+        "dimensions": {
+          "minimum_x_mm": -25.3,
+          "maximum_x_mm": 25.3,
+          "minimum_y_mm": -25.3,
+          "maximum_y_mm": 25.3,
+          "minimum_z_mm": 0.0,
+          "maximum_z_mm": 1.2,
+          "overall_width_mm": 50.6,
+          "overall_depth_mm": 50.6,
+          "overall_height_mm": 1.2
+        }
+      },
+      "validation_summary": {
+        "topologically_closed_by_edge_count": true,
+        "warning_count": 1
+      }
+    },
+    {
+      "primitive_id": "PRIM-0009",
+      "shape": "LENS",
+      "name": "Lens",
+      "filename_stem": "PRIM-0009_Lens",
+      "functional_intent": "Droplet-shaped visual lens",
+      "material": "Clear or translucent resin/PETG",
+      "finish": "Gloss or polished",
+      "notes": "Visual lens only; no optical focal specification.",
+      "quantity": 1,
+      "units": "millimeters",
+      "stl_filepath": "stl/PRIM-0009_Lens.stl",
+      "dimensions": {
+        "minimum_x_mm": -50.0,
+        "maximum_x_mm": 50.0,
+        "minimum_y_mm": -50.0,
+        "maximum_y_mm": 50.0,
+        "minimum_z_mm": 0.0,
+        "maximum_z_mm": 13.6,
+        "overall_width_mm": 100.0,
+        "overall_depth_mm": 100.0,
+        "overall_height_mm": 13.6
+      },
+      "parameters": {
+        "tile_width_mm": 100.0,
+        "tile_depth_mm": 100.0,
+        "tile_height_mm": 8.0,
+        "shape_width_mm": 55.0,
+        "shape_height_mm": 5.0,
+        "circle_segments": 64
+      },
+      "component": null,
+      "validation_summary": {
+        "topologically_closed_by_edge_count": true,
+        "warning_count": 1
+      }
+    },
+    {
+      "primitive_id": "PRIM-0010",
+      "shape": "MIRROR",
+      "name": "Mirror",
+      "filename_stem": "PRIM-0010_Mirror",
+      "functional_intent": "Reflective visual surface",
+      "material": "PLA/PETG frame",
+      "finish": "Matte frame with reflective insert",
+      "notes": "Separate insert template included; apply mirror film or acrylic.",
+      "quantity": 1,
+      "units": "millimeters",
+      "stl_filepath": "stl/PRIM-0010_Mirror.stl",
+      "dimensions": {
+        "minimum_x_mm": -50.0,
+        "maximum_x_mm": 50.0,
+        "minimum_y_mm": -50.0,
+        "maximum_y_mm": 50.0,
+        "minimum_z_mm": 0.0,
+        "maximum_z_mm": 12.15,
+        "overall_width_mm": 100.0,
+        "overall_depth_mm": 100.0,
+        "overall_height_mm": 12.15
+      },
+      "parameters": {
+        "tile_width_mm": 100.0,
+        "tile_depth_mm": 100.0,
+        "tile_height_mm": 8.0,
+        "shape_width_mm": 55.0,
+        "shape_height_mm": 5.0,
+        "circle_segments": 64
+      },
+      "component": {
+        "name": "reflective_insert_template",
+        "material": "Mirrored acrylic or reflective film",
+        "filepath": "components/PRIM-0010_Mirror/reflective_insert_template.stl",
+        "dimensions": {
+          "minimum_x_mm": -23.099999999999998,
+          "maximum_x_mm": 23.099999999999998,
+          "minimum_y_mm": -23.099999999999998,
+          "maximum_y_mm": 23.099999999999998,
+          "minimum_z_mm": 0.0,
+          "maximum_z_mm": 0.8,
+          "overall_width_mm": 46.199999999999996,
+          "overall_depth_mm": 46.199999999999996,
+          "overall_height_mm": 0.8
+        }
+      },
+      "validation_summary": {
+        "topologically_closed_by_edge_count": true,
+        "warning_count": 1
+      }
+    },
+    {
+      "primitive_id": "PRIM-0011",
+      "shape": "LIGHT_SOURCE",
+      "name": "Light Source",
+      "filename_stem": "PRIM-0011_Light_Source",
+      "functional_intent": "Illuminating or signaling surface",
+      "material": "PLA/PETG housing",
+      "finish": "Matte with translucent insert",
+      "notes": "Separate light-surface insert included; no electronics included.",
+      "quantity": 1,
+      "units": "millimeters",
+      "stl_filepath": "stl/PRIM-0011_Light_Source.stl",
+      "dimensions": {
+        "minimum_x_mm": -50.0,
+        "maximum_x_mm": 50.0,
+        "minimum_y_mm": -50.0,
+        "maximum_y_mm": 50.0,
+        "minimum_z_mm": 0.0,
+        "maximum_z_mm": 12.15,
+        "overall_width_mm": 100.0,
+        "overall_depth_mm": 100.0,
+        "overall_height_mm": 12.15
+      },
+      "parameters": {
+        "tile_width_mm": 100.0,
+        "tile_depth_mm": 100.0,
+        "tile_height_mm": 8.0,
+        "shape_width_mm": 55.0,
+        "shape_height_mm": 5.0,
+        "circle_segments": 64
+      },
+      "component": {
+        "name": "translucent_light_insert",
+        "material": "Translucent resin or PETG",
+        "filepath": "components/PRIM-0011_Light_Source/translucent_light_insert.stl",
+        "dimensions": {
+          "minimum_x_mm": -19.8,
+          "maximum_x_mm": 19.8,
+          "minimum_y_mm": -19.8,
+          "maximum_y_mm": 19.8,
+          "minimum_z_mm": 0.0,
+          "maximum_z_mm": 1.0,
+          "overall_width_mm": 39.6,
+          "overall_depth_mm": 39.6,
+          "overall_height_mm": 1.0
+        }
+      },
+      "validation_summary": {
+        "topologically_closed_by_edge_count": true,
+        "warning_count": 1
+      }
+    },
+    {
+      "primitive_id": "PRIM-0012",
+      "shape": "WEIGHT",
+      "name": "Weight",
+      "filename_stem": "PRIM-0012_Weight",
+      "functional_intent": "Visual concentration of mass",
+      "material": "PETG or filled polymer",
+      "finish": "Matte",
+      "notes": "Specify separately if actual ballast is required.",
+      "quantity": 1,
+      "units": "millimeters",
+      "stl_filepath": "stl/PRIM-0012_Weight.stl",
+      "dimensions": {
+        "minimum_x_mm": -50.0,
+        "maximum_x_mm": 50.0,
+        "minimum_y_mm": -50.0,
+        "maximum_y_mm": 50.0,
+        "minimum_z_mm": 0.0,
+        "maximum_z_mm": 16.0,
+        "overall_width_mm": 100.0,
+        "overall_depth_mm": 100.0,
+        "overall_height_mm": 16.0
+      },
+      "parameters": {
+        "tile_width_mm": 100.0,
+        "tile_depth_mm": 100.0,
+        "tile_height_mm": 8.0,
+        "shape_width_mm": 55.0,
+        "shape_height_mm": 5.0,
+        "circle_segments": 64
+      },
+      "component": null,
+      "validation_summary": {
+        "topologically_closed_by_edge_count": true,
+        "warning_count": 1
+      }
+    },
+    {
+      "primitive_id": "PRIM-0013",
+      "shape": "THRESHOLD",
+      "name": "Threshold",
+      "filename_stem": "PRIM-0013_Threshold",
+      "functional_intent": "Fixed boundary",
+      "material": "PLA or PETG",
+      "finish": "Matte",
+      "notes": "Raised transition spanning the tile.",
+      "quantity": 1,
+      "units": "millimeters",
+      "stl_filepath": "stl/PRIM-0013_Threshold.stl",
+      "dimensions": {
+        "minimum_x_mm": -50.0,
+        "maximum_x_mm": 50.0,
+        "minimum_y_mm": -50.0,
+        "maximum_y_mm": 50.0,
+        "minimum_z_mm": 0.0,
+        "maximum_z_mm": 13.0,
+        "overall_width_mm": 100.0,
+        "overall_depth_mm": 100.0,
+        "overall_height_mm": 13.0
+      },
+      "parameters": {
+        "tile_width_mm": 100.0,
+        "tile_depth_mm": 100.0,
+        "tile_height_mm": 8.0,
+        "shape_width_mm": 55.0,
+        "shape_height_mm": 5.0,
+        "circle_segments": 64
+      },
+      "component": null,
+      "validation_summary": {
+        "topologically_closed_by_edge_count": true,
+        "warning_count": 1
+      }
+    },
+    {
+      "primitive_id": "PRIM-0014",
+      "shape": "SENSOR",
+      "name": "Sensor",
+      "filename_stem": "PRIM-0014_Sensor",
+      "functional_intent": "Symbolic detecting surface",
+      "material": "PLA/PETG housing",
+      "finish": "Matte with dark insert",
+      "notes": "Separate detector-surface insert included; no electronics included.",
+      "quantity": 1,
+      "units": "millimeters",
+      "stl_filepath": "stl/PRIM-0014_Sensor.stl",
+      "dimensions": {
+        "minimum_x_mm": -50.0,
+        "maximum_x_mm": 50.0,
+        "minimum_y_mm": -50.0,
+        "maximum_y_mm": 50.0,
+        "minimum_z_mm": 0.0,
+        "maximum_z_mm": 11.125,
+        "overall_width_mm": 100.0,
+        "overall_depth_mm": 100.0,
+        "overall_height_mm": 11.125
+      },
+      "parameters": {
+        "tile_width_mm": 100.0,
+        "tile_depth_mm": 100.0,
+        "tile_height_mm": 8.0,
+        "shape_width_mm": 55.0,
+        "shape_height_mm": 5.0,
+        "circle_segments": 64
+      },
+      "component": {
+        "name": "dark_sensor_insert",
+        "material": "Dark gloss resin, PLA, or PETG",
+        "filepath": "components/PRIM-0014_Sensor/dark_sensor_insert.stl",
+        "dimensions": {
+          "minimum_x_mm": -17.05,
+          "maximum_x_mm": 17.05,
+          "minimum_y_mm": -17.05,
+          "maximum_y_mm": 17.05,
+          "minimum_z_mm": 0.0,
+          "maximum_z_mm": 1.0,
+          "overall_width_mm": 34.1,
+          "overall_depth_mm": 34.1,
+          "overall_height_mm": 1.0
+        }
+      },
+      "validation_summary": {
+        "topologically_closed_by_edge_count": true,
+        "warning_count": 1
+      }
+    },
+    {
+      "primitive_id": "PRIM-0015",
+      "shape": "HANDLE",
+      "name": "Handle",
+      "filename_stem": "PRIM-0015_Handle",
+      "functional_intent": "Graspable interface prototype",
+      "material": "PETG preferred",
+      "finish": "Matte",
+      "notes": "Prototype only until a required working load is specified and tested.",
+      "quantity": 1,
+      "units": "millimeters",
+      "stl_filepath": "stl/PRIM-0015_Handle.stl",
+      "dimensions": {
+        "minimum_x_mm": -50.0,
+        "maximum_x_mm": 50.0,
+        "minimum_y_mm": -50.0,
+        "maximum_y_mm": 50.0,
+        "minimum_z_mm": 0.0,
+        "maximum_z_mm": 28.0,
+        "overall_width_mm": 100.0,
+        "overall_depth_mm": 100.0,
+        "overall_height_mm": 28.0
+      },
+      "parameters": {
+        "tile_width_mm": 100.0,
+        "tile_depth_mm": 100.0,
+        "tile_height_mm": 8.0,
+        "shape_width_mm": 55.0,
+        "shape_height_mm": 5.0,
+        "circle_segments": 64
+      },
+      "component": null,
+      "validation_summary": {
+        "topologically_closed_by_edge_count": true,
+        "warning_count": 1
+      }
+    }
+  ]
+}

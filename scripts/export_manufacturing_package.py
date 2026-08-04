@@ -1,0 +1,1422 @@
+"""Export the complete OWDE primitive library for manufacturing.
+
+Run through Blender:
+
+    blender --background \
+        --python scripts/export_manufacturing_package.py \
+        -- \
+        --output exports/OWDE_Manufacturing_Package
+
+The generated STL coordinates are expressed numerically in millimeters.
+STL files do not store units, so the package documentation explicitly
+instructs the manufacturer to import them as millimeters.
+"""
+
+from __future__ import annotations
+
+import argparse
+import csv
+import json
+import math
+import shutil
+import sys
+from collections import Counter
+from dataclasses import asdict, dataclass
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any, Iterable
+from zipfile import ZIP_DEFLATED, ZipFile
+
+
+try:
+    import bpy
+except ImportError as exc:
+    raise SystemExit(
+        "This script must be run through Blender, not ordinary Python.\n"
+        "\n"
+        "Example:\n"
+        "  blender --background "
+        "--python scripts/export_manufacturing_package.py "
+        "-- --output exports/OWDE_Manufacturing_Package"
+    ) from exc
+
+
+REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+
+if str(REPOSITORY_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPOSITORY_ROOT))
+
+
+from owde_addon.core.builders import build_tile_mesh
+from owde_addon.core.mesh import MeshData
+from owde_addon.core.models import ShapeType, TileParameters
+
+
+PACKAGE_VERSION = "0.1.0"
+MM_TO_METERS = 0.001
+
+
+@dataclass(frozen=True)
+class PrimitiveRecord:
+    primitive_id: str
+    shape: ShapeType
+    name: str
+    filename_stem: str
+    functional_intent: str
+    material: str
+    finish: str
+    notes: str
+
+
+PRIMITIVES: tuple[PrimitiveRecord, ...] = (
+    PrimitiveRecord(
+        "PRIM-0001",
+        ShapeType.CIRCLE,
+        "Raised Circle",
+        "PRIM-0001_Raised_Circle",
+        "Fixed raised form",
+        "PLA or PETG",
+        "Matte",
+        "Visual and spatial primitive.",
+    ),
+    PrimitiveRecord(
+        "PRIM-0002",
+        ShapeType.TRIANGLE,
+        "Raised Triangle",
+        "PRIM-0002_Raised_Triangle",
+        "Fixed raised form",
+        "PLA or PETG",
+        "Matte",
+        "Visual and directional primitive.",
+    ),
+    PrimitiveRecord(
+        "PRIM-0003",
+        ShapeType.SQUARE,
+        "Raised Square",
+        "PRIM-0003_Raised_Square",
+        "Fixed raised form",
+        "PLA or PETG",
+        "Matte",
+        "Visual and spatial primitive.",
+    ),
+    PrimitiveRecord(
+        "PRIM-0004",
+        ShapeType.HEXAGON,
+        "Raised Hexagon",
+        "PRIM-0004_Raised_Hexagon",
+        "Fixed raised form",
+        "PLA or PETG",
+        "Matte",
+        "Top and bottom hexagon sides remain parallel to tile edges.",
+    ),
+    PrimitiveRecord(
+        "PRIM-0005",
+        ShapeType.SLOT,
+        "Slot",
+        "PRIM-0005_Slot",
+        "Recessed visual channel",
+        "PLA or PETG",
+        "Matte with dark insert",
+        "Separate dark capsule insert included.",
+    ),
+    PrimitiveRecord(
+        "PRIM-0006",
+        ShapeType.HINGE,
+        "Hinge",
+        "PRIM-0006_Hinge",
+        "Symbolic hinge prototype",
+        "PETG preferred",
+        "Matte",
+        "Current geometry is not certified as a load-bearing moving hinge.",
+    ),
+    PrimitiveRecord(
+        "PRIM-0007",
+        ShapeType.FOLD,
+        "Fold",
+        "PRIM-0007_Fold",
+        "Fixed elevated plane",
+        "PLA or PETG",
+        "Matte",
+        "Support placement should avoid the primary presentation surface.",
+    ),
+    PrimitiveRecord(
+        "PRIM-0008",
+        ShapeType.APERTURE,
+        "Aperture",
+        "PRIM-0008_Aperture",
+        "Opening or simulated visual depth",
+        "PLA or PETG",
+        "Matte with dark insert",
+        "Separate recessed circular backing insert included.",
+    ),
+    PrimitiveRecord(
+        "PRIM-0009",
+        ShapeType.LENS,
+        "Lens",
+        "PRIM-0009_Lens",
+        "Droplet-shaped visual lens",
+        "Clear or translucent resin/PETG",
+        "Gloss or polished",
+        "Visual lens only; no optical focal specification.",
+    ),
+    PrimitiveRecord(
+        "PRIM-0010",
+        ShapeType.MIRROR,
+        "Mirror",
+        "PRIM-0010_Mirror",
+        "Reflective visual surface",
+        "PLA/PETG frame",
+        "Matte frame with reflective insert",
+        "Separate insert template included; apply mirror film or acrylic.",
+    ),
+    PrimitiveRecord(
+        "PRIM-0011",
+        ShapeType.LIGHT_SOURCE,
+        "Light Source",
+        "PRIM-0011_Light_Source",
+        "Illuminating or signaling surface",
+        "PLA/PETG housing",
+        "Matte with translucent insert",
+        "Separate light-surface insert included; no electronics included.",
+    ),
+    PrimitiveRecord(
+        "PRIM-0012",
+        ShapeType.WEIGHT,
+        "Weight",
+        "PRIM-0012_Weight",
+        "Visual concentration of mass",
+        "PETG or filled polymer",
+        "Matte",
+        "Specify separately if actual ballast is required.",
+    ),
+    PrimitiveRecord(
+        "PRIM-0013",
+        ShapeType.THRESHOLD,
+        "Threshold",
+        "PRIM-0013_Threshold",
+        "Fixed boundary",
+        "PLA or PETG",
+        "Matte",
+        "Raised transition spanning the tile.",
+    ),
+    PrimitiveRecord(
+        "PRIM-0014",
+        ShapeType.SENSOR,
+        "Sensor",
+        "PRIM-0014_Sensor",
+        "Symbolic detecting surface",
+        "PLA/PETG housing",
+        "Matte with dark insert",
+        "Separate detector-surface insert included; no electronics included.",
+    ),
+    PrimitiveRecord(
+        "PRIM-0015",
+        ShapeType.HANDLE,
+        "Handle",
+        "PRIM-0015_Handle",
+        "Graspable interface prototype",
+        "PETG preferred",
+        "Matte",
+        "Prototype only until a required working load is specified and tested.",
+    ),
+)
+
+
+SEPARATE_COMPONENTS = {
+    ShapeType.SLOT: (
+        "dark_slot_insert",
+        "Matte black PLA or PETG",
+    ),
+    ShapeType.APERTURE: (
+        "dark_aperture_insert",
+        "Matte black PLA or PETG",
+    ),
+    ShapeType.MIRROR: (
+        "reflective_insert_template",
+        "Mirrored acrylic or reflective film",
+    ),
+    ShapeType.LIGHT_SOURCE: (
+        "translucent_light_insert",
+        "Translucent resin or PETG",
+    ),
+    ShapeType.SENSOR: (
+        "dark_sensor_insert",
+        "Dark gloss resin, PLA, or PETG",
+    ),
+}
+
+
+def parse_arguments() -> argparse.Namespace:
+    script_arguments = []
+
+    if "--" in sys.argv:
+        script_arguments = sys.argv[
+            sys.argv.index("--") + 1 :
+        ]
+
+    parser = argparse.ArgumentParser(
+        description="Export the OWDE manufacturing package."
+    )
+
+    parser.add_argument(
+        "--output",
+        default="exports/OWDE_Manufacturing_Package",
+        help="Package directory, relative to the repository root.",
+    )
+
+    parser.add_argument(
+        "--tile-width",
+        type=float,
+        default=100.0,
+    )
+
+    parser.add_argument(
+        "--tile-depth",
+        type=float,
+        default=100.0,
+    )
+
+    parser.add_argument(
+        "--tile-height",
+        type=float,
+        default=8.0,
+    )
+
+    parser.add_argument(
+        "--feature-width",
+        type=float,
+        default=55.0,
+    )
+
+    parser.add_argument(
+        "--feature-height",
+        type=float,
+        default=5.0,
+    )
+
+    parser.add_argument(
+        "--circle-segments",
+        type=int,
+        default=64,
+    )
+
+    parser.add_argument(
+        "--quantity",
+        type=int,
+        default=1,
+    )
+
+    parser.add_argument(
+        "--overwrite",
+        action="store_true",
+    )
+
+    return parser.parse_args(script_arguments)
+
+
+def resolve_output_path(raw_path: str) -> Path:
+    output_path = Path(raw_path).expanduser()
+
+    if not output_path.is_absolute():
+        output_path = REPOSITORY_ROOT / output_path
+
+    return output_path.resolve()
+
+
+def reset_scene() -> None:
+    bpy.ops.object.select_all(action="SELECT")
+    bpy.ops.object.delete(use_global=False)
+
+    for mesh in list(bpy.data.meshes):
+        if mesh.users == 0:
+            bpy.data.meshes.remove(mesh)
+
+
+def create_blender_object(
+    name: str,
+    mesh_data: MeshData,
+) -> bpy.types.Object:
+    mesh_data.validate()
+
+    blender_mesh = bpy.data.meshes.new(
+        f"{name}_Mesh"
+    )
+
+    # The core engine uses millimeters. We intentionally retain the
+    # numerical coordinates for unitless STL delivery.
+    blender_mesh.from_pydata(
+        list(mesh_data.vertices),
+        [],
+        list(mesh_data.faces),
+    )
+
+    blender_mesh.update(
+        calc_edges=True,
+    )
+
+    blender_object = bpy.data.objects.new(
+        name,
+        blender_mesh,
+    )
+
+    bpy.context.scene.collection.objects.link(
+        blender_object
+    )
+
+    return blender_object
+
+
+def select_only(
+    objects: Iterable[bpy.types.Object],
+) -> None:
+    bpy.ops.object.select_all(action="DESELECT")
+
+    active = None
+
+    for object_ in objects:
+        object_.select_set(True)
+        active = object_
+
+    if active is not None:
+        bpy.context.view_layer.objects.active = active
+
+
+def stl_export_arguments(
+    filepath: Path,
+) -> dict[str, Any]:
+    arguments: dict[str, Any] = {
+        "filepath": str(filepath),
+    }
+
+    operator = bpy.ops.wm.stl_export
+    supported = {
+        property_.identifier
+        for property_ in operator.get_rna_type().properties
+    }
+
+    optional_arguments = {
+        "check_existing": False,
+        "export_selected_objects": True,
+        "apply_modifiers": True,
+        "ascii_format": False,
+        "global_scale": 1.0,
+        "apply_unit_scale": False,
+        "forward_axis": "Y",
+        "up_axis": "Z",
+    }
+
+    for key, value in optional_arguments.items():
+        if key in supported:
+            arguments[key] = value
+
+    return arguments
+
+
+def export_selected_stl(
+    filepath: Path,
+) -> None:
+    filepath.parent.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    if hasattr(bpy.ops.wm, "stl_export"):
+        result = bpy.ops.wm.stl_export(
+            **stl_export_arguments(filepath)
+        )
+    elif hasattr(bpy.ops.export_mesh, "stl"):
+        result = bpy.ops.export_mesh.stl(
+            filepath=str(filepath),
+            use_selection=True,
+            global_scale=1.0,
+            use_scene_unit=False,
+            ascii=False,
+        )
+    else:
+        raise RuntimeError(
+            "No Blender STL exporter is available."
+        )
+
+    if "FINISHED" not in result:
+        raise RuntimeError(
+            f"STL export failed for {filepath}."
+        )
+
+
+def calculate_bounds(
+    mesh_data: MeshData,
+) -> dict[str, float]:
+    xs = [vertex[0] for vertex in mesh_data.vertices]
+    ys = [vertex[1] for vertex in mesh_data.vertices]
+    zs = [vertex[2] for vertex in mesh_data.vertices]
+
+    return {
+        "minimum_x_mm": min(xs),
+        "maximum_x_mm": max(xs),
+        "minimum_y_mm": min(ys),
+        "maximum_y_mm": max(ys),
+        "minimum_z_mm": min(zs),
+        "maximum_z_mm": max(zs),
+        "overall_width_mm": max(xs) - min(xs),
+        "overall_depth_mm": max(ys) - min(ys),
+        "overall_height_mm": max(zs) - min(zs),
+    }
+
+
+def normalized_edge(
+    first: int,
+    second: int,
+) -> tuple[int, int]:
+    return (
+        (first, second)
+        if first < second
+        else (second, first)
+    )
+
+
+def face_area(
+    vertices: tuple[tuple[float, float, float], ...],
+    face: tuple[int, ...],
+) -> float:
+    if len(face) < 3:
+        return 0.0
+
+    origin = vertices[face[0]]
+    total_area = 0.0
+
+    for index in range(1, len(face) - 1):
+        first = vertices[face[index]]
+        second = vertices[face[index + 1]]
+
+        vector_a = (
+            first[0] - origin[0],
+            first[1] - origin[1],
+            first[2] - origin[2],
+        )
+
+        vector_b = (
+            second[0] - origin[0],
+            second[1] - origin[1],
+            second[2] - origin[2],
+        )
+
+        cross = (
+            vector_a[1] * vector_b[2]
+            - vector_a[2] * vector_b[1],
+            vector_a[2] * vector_b[0]
+            - vector_a[0] * vector_b[2],
+            vector_a[0] * vector_b[1]
+            - vector_a[1] * vector_b[0],
+        )
+
+        total_area += 0.5 * math.sqrt(
+            cross[0] ** 2
+            + cross[1] ** 2
+            + cross[2] ** 2
+        )
+
+    return total_area
+
+
+def validate_mesh(
+    mesh_data: MeshData,
+) -> dict[str, Any]:
+    mesh_data.validate()
+
+    edge_counts: Counter[tuple[int, int]] = Counter()
+    zero_area_faces: list[int] = []
+
+    for face_index, face in enumerate(mesh_data.faces):
+        for index, first in enumerate(face):
+            second = face[
+                (index + 1) % len(face)
+            ]
+
+            edge_counts[
+                normalized_edge(first, second)
+            ] += 1
+
+        if face_area(
+            mesh_data.vertices,
+            face,
+        ) <= 1e-9:
+            zero_area_faces.append(face_index)
+
+    boundary_edges = [
+        edge
+        for edge, count in edge_counts.items()
+        if count == 1
+    ]
+
+    overused_edges = [
+        edge
+        for edge, count in edge_counts.items()
+        if count > 2
+    ]
+
+    warnings: list[str] = []
+
+    if boundary_edges:
+        warnings.append(
+            f"{len(boundary_edges)} boundary edges detected."
+        )
+
+    if overused_edges:
+        warnings.append(
+            f"{len(overused_edges)} edges are shared by more than two faces."
+        )
+
+    if zero_area_faces:
+        warnings.append(
+            f"{len(zero_area_faces)} zero-area faces detected."
+        )
+
+    # A combined mesh can contain individually closed intersecting shells.
+    # The exporter cannot certify Boolean union without modifying design
+    # geometry, so this is always disclosed to the manufacturer.
+    warnings.append(
+        "Primitive may contain overlapping closed shells; "
+        "vendor Boolean-union or slicer verification is recommended."
+    )
+
+    return {
+        "vertex_count": len(mesh_data.vertices),
+        "face_count": len(mesh_data.faces),
+        "unique_edge_count": len(edge_counts),
+        "boundary_edge_count": len(boundary_edges),
+        "overused_edge_count": len(overused_edges),
+        "zero_area_face_count": len(zero_area_faces),
+        "topologically_closed_by_edge_count": (
+            not boundary_edges
+            and not overused_edges
+            and not zero_area_faces
+        ),
+        "warnings": warnings,
+    }
+
+
+def rectangular_prism_mesh(
+    width_mm: float,
+    depth_mm: float,
+    height_mm: float,
+    base_z_mm: float = 0.0,
+) -> MeshData:
+    half_width = width_mm / 2.0
+    half_depth = depth_mm / 2.0
+    top_z = base_z_mm + height_mm
+
+    vertices = (
+        (-half_width, -half_depth, base_z_mm),
+        (half_width, -half_depth, base_z_mm),
+        (half_width, half_depth, base_z_mm),
+        (-half_width, half_depth, base_z_mm),
+        (-half_width, -half_depth, top_z),
+        (half_width, -half_depth, top_z),
+        (half_width, half_depth, top_z),
+        (-half_width, half_depth, top_z),
+    )
+
+    faces = (
+        (3, 2, 1, 0),
+        (4, 5, 6, 7),
+        (0, 1, 5, 4),
+        (1, 2, 6, 5),
+        (2, 3, 7, 6),
+        (3, 0, 4, 7),
+    )
+
+    result = MeshData(
+        vertices=vertices,
+        faces=faces,
+    )
+
+    result.validate()
+    return result
+
+
+def cylinder_mesh(
+    radius_mm: float,
+    height_mm: float,
+    segments: int,
+    base_z_mm: float = 0.0,
+) -> MeshData:
+    vertices: list[tuple[float, float, float]] = []
+
+    for z in (
+        base_z_mm,
+        base_z_mm + height_mm,
+    ):
+        for index in range(segments):
+            angle = (
+                2.0
+                * math.pi
+                * index
+                / segments
+            )
+
+            vertices.append(
+                (
+                    radius_mm * math.cos(angle),
+                    radius_mm * math.sin(angle),
+                    z,
+                )
+            )
+
+    faces: list[tuple[int, ...]] = [
+        tuple(reversed(range(segments))),
+        tuple(
+            segments + index
+            for index in range(segments)
+        ),
+    ]
+
+    for index in range(segments):
+        next_index = (
+            index + 1
+        ) % segments
+
+        faces.append(
+            (
+                index,
+                next_index,
+                segments + next_index,
+                segments + index,
+            )
+        )
+
+    result = MeshData(
+        vertices=tuple(vertices),
+        faces=tuple(faces),
+    )
+
+    result.validate()
+    return result
+
+
+def combine_meshes(
+    meshes: Iterable[MeshData],
+) -> MeshData:
+    vertices: list[tuple[float, float, float]] = []
+    faces: list[tuple[int, ...]] = []
+
+    for mesh_data in meshes:
+        offset = len(vertices)
+        vertices.extend(mesh_data.vertices)
+
+        faces.extend(
+            tuple(index + offset for index in face)
+            for face in mesh_data.faces
+        )
+
+    result = MeshData(
+        vertices=tuple(vertices),
+        faces=tuple(faces),
+    )
+
+    result.validate()
+    return result
+
+
+def translated_mesh(
+    mesh_data: MeshData,
+    x_mm: float = 0.0,
+    y_mm: float = 0.0,
+    z_mm: float = 0.0,
+) -> MeshData:
+    return MeshData(
+        vertices=tuple(
+            (
+                vertex[0] + x_mm,
+                vertex[1] + y_mm,
+                vertex[2] + z_mm,
+            )
+            for vertex in mesh_data.vertices
+        ),
+        faces=mesh_data.faces,
+    )
+
+
+def capsule_insert_mesh(
+    length_mm: float,
+    width_mm: float,
+    height_mm: float,
+    segments: int,
+) -> MeshData:
+    straight_length = max(
+        1.0,
+        length_mm - width_mm,
+    )
+
+    center = rectangular_prism_mesh(
+        width_mm=straight_length,
+        depth_mm=width_mm,
+        height_mm=height_mm,
+    )
+
+    radius = width_mm / 2.0
+
+    left = translated_mesh(
+        cylinder_mesh(
+            radius_mm=radius,
+            height_mm=height_mm,
+            segments=segments,
+        ),
+        x_mm=-straight_length / 2.0,
+    )
+
+    right = translated_mesh(
+        cylinder_mesh(
+            radius_mm=radius,
+            height_mm=height_mm,
+            segments=segments,
+        ),
+        x_mm=straight_length / 2.0,
+    )
+
+    return combine_meshes(
+        (center, left, right)
+    )
+
+
+def component_mesh_for_shape(
+    shape: ShapeType,
+    parameters: TileParameters,
+) -> MeshData | None:
+    insert_height = 1.2
+
+    if shape is ShapeType.SLOT:
+        slot_width = max(
+            8.0,
+            min(
+                parameters.shape_height_mm * 2.4,
+                parameters.shape_width_mm * 0.30,
+            ),
+        )
+
+        return capsule_insert_mesh(
+            length_mm=parameters.shape_width_mm,
+            width_mm=slot_width,
+            height_mm=insert_height,
+            segments=parameters.circle_segments,
+        )
+
+    if shape is ShapeType.APERTURE:
+        return cylinder_mesh(
+            radius_mm=parameters.shape_width_mm * 0.46,
+            height_mm=insert_height,
+            segments=parameters.circle_segments,
+        )
+
+    if shape is ShapeType.MIRROR:
+        return cylinder_mesh(
+            radius_mm=parameters.shape_width_mm * 0.42,
+            height_mm=0.8,
+            segments=parameters.circle_segments,
+        )
+
+    if shape is ShapeType.LIGHT_SOURCE:
+        return cylinder_mesh(
+            radius_mm=parameters.shape_width_mm * 0.36,
+            height_mm=1.0,
+            segments=parameters.circle_segments,
+        )
+
+    if shape is ShapeType.SENSOR:
+        return cylinder_mesh(
+            radius_mm=parameters.shape_width_mm * 0.31,
+            height_mm=1.0,
+            segments=parameters.circle_segments,
+        )
+
+    return None
+
+
+def create_directories(
+    package_root: Path,
+) -> dict[str, Path]:
+    directories = {
+        "root": package_root,
+        "stl": package_root / "stl",
+        "components": package_root / "components",
+        "specifications": package_root / "specifications",
+        "validation": package_root / "validation",
+    }
+
+    for directory in directories.values():
+        directory.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
+    return directories
+
+
+def write_json(
+    filepath: Path,
+    payload: Any,
+) -> None:
+    filepath.write_text(
+        json.dumps(
+            payload,
+            indent=2,
+            sort_keys=False,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+
+def write_dimensions_csv(
+    filepath: Path,
+    rows: list[dict[str, Any]],
+) -> None:
+    fieldnames = (
+        "primitive_id",
+        "primitive_name",
+        "shape_type",
+        "overall_width_mm",
+        "overall_depth_mm",
+        "overall_height_mm",
+        "tile_width_mm",
+        "tile_depth_mm",
+        "tile_height_mm",
+        "feature_width_mm",
+        "feature_height_mm",
+        "quantity",
+        "primary_material",
+        "finish",
+        "separate_component",
+    )
+
+    with filepath.open(
+        "w",
+        encoding="utf-8",
+        newline="",
+    ) as csv_file:
+        writer = csv.DictWriter(
+            csv_file,
+            fieldnames=fieldnames,
+        )
+
+        writer.writeheader()
+
+        for row in rows:
+            writer.writerow(
+                {
+                    key: row.get(key, "")
+                    for key in fieldnames
+                }
+            )
+
+
+def manufacturing_specification(
+    arguments: argparse.Namespace,
+) -> str:
+    return f"""# OWDE Manufacturing Specification
+
+## Project
+
+Operational Worlds Design Engine — Complete Fifteen-Primitive Prototype Set
+
+Package version: {PACKAGE_VERSION}
+
+## Unit declaration
+
+**All STL coordinates are numerically expressed in millimeters.**
+
+STL does not encode units. Import every STL as millimeters and do not
+automatically rescale the models.
+
+## Standard tile
+
+- Width: {arguments.tile_width:.3f} mm
+- Depth: {arguments.tile_depth:.3f} mm
+- Base thickness: {arguments.tile_height:.3f} mm
+- Standard feature width: {arguments.feature_width:.3f} mm
+- Standard feature parameter: {arguments.feature_height:.3f} mm
+
+## Requested prototype quantity
+
+- {arguments.quantity} of each primitive
+- One complete approval set before larger production
+
+## Recommended prototype process
+
+- FDM/FFF
+- PLA for visual prototypes
+- PETG for Handle, Hinge, and frequently handled pieces
+- 0.20m nominal layer height
+- 0.40 mm nozzle
+- At least three walls/perimeters
+- At least four top and bottom layers
+- 15–25% infill for visual tiles
+- Increased walls or infill where structurally necessary
+
+These are starting recommendations. The manufacturer should propose
+machine-appropriate settings.
+
+## Separate material components
+
+- Slot: matte-black capsule insert
+- Aperture: matte-black recessed circular insert
+- Mirror: reflective-film or mirrored-acrylic insert template
+- Light Source: translucent insert
+- Sensor: dark detector-surface insert
+- Lens: clear or translucent primary primitive where practical
+
+## Fit allowances
+
+Suggested starting clearances for FDM:
+
+- Removable insert: 0.25–0.35 mm per side
+- Sliding fit: 0.25–0.40 mm per side
+- Moving hinge: 0.30–0.50 mm
+- Minimum durable wall: 1.20 mm
+- Preferred wall: 1.60–2.00 mm
+
+The manufacturer should adjust clearances based on process calibration.
+
+## Functional status
+
+The current library is a design and research prototype.
+
+- Hinge isertified as a production moving joint.
+- Handle is not assigned a working-load rating.
+- Lens is not an optical-grade lens.
+- Light Source does not include electronics.
+- Sensor does not include electronics.
+- Weight does not contain specified ballast.
+- Mirror requires a reflective insert or applied reflective finish.
+
+## Mesh review
+
+The validation reports perform structural checks on source polygons.
+Some primitives may contain intersecting closed shells rather than a
+single Boolean-unioned production solid.
+
+Before printing, verify:
+
+- watertight/manifold result in the selected slicer;
+- no accidental internal surfaces;
+- no inverted normals;
+- no unsupported floating bodies;
+- intended insert clearances;
+- bottom flatness;
+- support placement;
+- final orientation.
+
+## Presentation requirements
+
+- Keep tile bottoms flat.
+- Remove strings, burrs, and supports.
+- Avoid support scars on primary visible surfaces.
+- Do not sand away intentional edges.
+- Maintain consistent finish across the complete set.
+- Preserve the flat-top orientation of the raised hexagon.
+
+## Approval
+
+Do not begin a larger production run until the complete prototype set
+has been physically reviewed and approved.
+"""
+
+
+def package_readme() -> str:
+    return """# OWDE Manufacturing Package
+
+This package contains the complete fifteen-primitive Operational Worlds
+prototype library.
+
+## Contents
+
+- `stl/` — complete primitive STL files
+- `components/` — separate insert and finish-component STL files
+- `specifications/` — manufacturing specification and dimensions
+- `validation/` — source-mesh validation results
+- `manifest.json` — complete machine-readable package manifest
+
+## Critical unit instruction
+
+All STL files must be imported as **millimeters**.
+
+Do not rescale the models unless a revised dimension schedule has been
+approved.
+"""
+
+
+def warnings_markdown(
+    validation_records: list[dict[str, Any]],
+) -> str:
+    lines = [
+        "# Manufacturing Warnings",
+        "",
+        "These warnings should be reviewed before sluoting.",
+        "",
+    ]
+
+    for record in validation_records:
+        lines.extend(
+            (
+                f"## {record['primitive_id']} — "
+                f"{record['primitive_name']}",
+                "",
+            )
+        )
+
+        warnings = record["validation"]["warnings"]
+
+        for warning in warnings:
+            lines.append(f"- {warning}")
+
+        lines.append("")
+
+    return "\n".join(lines)
+
+
+def create_zip_archive(
+    package_root: Path,
+) -> Path:
+    zip_path = package_root.with_suffix(".zip")
+
+    if zip_path.exists():
+        zip_path.unlink()
+
+    with ZipFile(
+        zip_path,
+        "w",
+        compression=ZIP_DEFLATED,
+    ) as archive:
+        for filepath in sorted(
+            package_root.rglob("*")
+        ):
+            if filepath.is_file():
+                archive.write(
+                    filepath,
+                    filepath.relative_to(
+                        package_root.parent
+                    ),
+                )
+
+    return zip_path
+
+
+def build_parameters(
+    shape: ShapeType,
+    arguments: argparse.Namespace,
+) -> TileParameters:
+    return TileParameters(
+        shape=shape,
+        tile_width_mm=arguments.tile_width,
+        tile_depth_mm=arguments.tile_depth,
+        tile_height_mm=arguments.tile_height,
+        shape_width_mm=arguments.feature_width,
+        shape_height_mm=arguments.feature_height,
+        circle_segments=arguments.circle_segments,
+    )
+
+
+def export_package(
+    arguments: argparse.Namespace,
+) -> tuple[Path, Path]:
+    package_root = resolve_output_path(
+        arguments.output
+    )
+
+    if package_root.exists():
+        if not arguments.overwrite:
+            raise SystemExit(
+                f"Output already exists:\n  {package_root}\n\n"
+                "Run again with --overwrite to replace it."
+            )
+
+        shutil.rmtree(package_root)
+
+    directories = create_directories(
+        package_root
+    )
+
+    reset_scene()
+
+    generated_at = datetime.now(
+        UTC
+    ).isoformat()
+
+    dimension_rows: list[dict[str, Any]] = []
+    validation_records: list[dict[str, Any]] = []
+    manifest_primitives: list[dict[str, Any]] = []
+
+    for primitive in PRIMITIVES:
+        parameters = build_parameters(
+            primitive.shape,
+            arguments,
+        )
+
+        mesh_data = build_tile_mesh(parameters)
+        mesh_data.validate()
+
+        bounds = calculate_bounds(mesh_data)
+        validation = validate_mesh(mesh_data)
+
+        object_ = create_blender_object(
+            primitive.filename_stem,
+            mesh_data,
+        )
+
+        object_["owde_primitive_id"] = (
+            primitive.primitive_id
+        )
+        object_["owde_primitive_name"] = (
+            primitive.name
+        )
+        object_["owde_units"] = "millimeters"
+
+        select_only((object_,))
+
+        stl_relative = (
+            Path("stl")
+            / f"{primitive.filename_stem}.stl"
+        )
+
+        export_selected_stl(
+            package_root / stl_relative
+        )
+
+        component_manifest = None
+        component_mesh = component_mesh_for_shape(
+            primitive.shape,
+            parameters,
+        )
+
+        if component_mesh is not None:
+            component_name, component_material = (
+                SEPARATE_COMPONENTS[
+                    primitive.shape
+                ]
+            )
+
+            component_folder = (
+                directories["components"]
+                / primitive.filename_stem
+            )
+
+            component_folder.mkdir(
+                parents=True,
+                exist_ok=True,
+            )
+
+            component_object = (
+                create_blender_object(
+                    (
+                        f"{primitive.filename_stem}_"
+                        f"{component_name}"
+                    ),
+                    component_mesh,
+                )
+            )
+
+            select_only((component_object,))
+
+            component_filepath = (
+                component_folder
+                / f"{component_name}.stl"
+            )
+
+            export_selected_stl(
+                component_filepath
+            )
+
+            component_manifest = {
+                "name": component_name,
+                "material": component_material,
+                "filepath": str(
+                    component_filepath.relative_to(
+                        package_root
+                    )
+                ),
+                "dimensions": calculate_bounds(
+                    component_mesh
+                ),
+            }
+
+            bpy.data.objects.remove(
+                component_object,
+                do_unlink=True,
+            )
+
+        separate_component_name = (
+            component_manifest["name"]
+            if component_manifest
+            else ""
+        )
+
+        dimension_row = {
+            "primitive_id": primitive.primitive_id,
+            "primitive_name": primitive.name,
+            "shape_type": primitive.shape.value,
+            **bounds,
+            "tile_width_mm": arguments.tile_width,
+            "tile_depth_mm": arguments.tile_depth,
+            "tile_height_mm": arguments.tile_height,
+            "feature_width_mm": arguments.feature_width,
+            "feature_height_mm": arguments.feature_height,
+            "quantity": arguments.quantity,
+            "primary_material": primitive.material,
+            "finish": primitive.finish,
+            "separate_component": separate_component_name,
+        }
+
+        dimension_rows.append(
+            dimension_row
+        )
+
+        validation_record = {
+            "primitive_id": primitive.primitive_id,
+            "primitive_name": primitive.name,
+            "validation": validation,
+        }
+
+        validation_records.append(
+            validation_record
+        )
+
+        manifest_primitives.append(
+            {
+                **asdict(primitive),
+                "shape": primitive.shape.value,
+                "quantity": arguments.quantity,
+                "units": "millimeters",
+                "stl_filepath": str(stl_relative),
+                "dimensions": bounds,
+                "parameters": {
+                    "tile_width_mm": arguments.tile_width,
+                    "tile_depth_mm": arguments.tile_depth,
+                    "tile_height_mm": arguments.tile_height,
+                    "shape_width_mm": arguments.feature_width,
+                    "shape_height_mm": arguments.feature_height,
+                    "circle_segments": arguments.circle_segments,
+                },
+                "component": component_manifest,
+                "validation_summary": {
+                    "topologically_closed_by_edge_count": (
+                        validation[
+                            "topologically_closed_by_edge_count"
+                        ]
+                    ),
+                    "warning_count": len(
+                        validation["warnings"]
+                    ),
+                },
+            }
+        )
+
+        bpy.data.objects.remove(
+            object_,
+            do_unlink=True,
+        )
+
+        print(
+            f"Exported {primitive.primitive_id}: "
+            f"{primitive.name}"
+        )
+
+    manifest = {
+        "package_name": "OWDE Manufacturing Package",
+        "package_version": PACKAGE_VERSION,
+        "generated_at_utc": generated_at,
+        "coordinate_units": "millimeters",
+        "stl_unit_warning": (
+            "STL does not encode units. "
+            "Import every file as millimeters."
+        ),
+        "primitive_count": len(PRIMITIVES),
+        "quantity_per_primitive": arguments.quantity,
+        "primitives": manifest_primitives,
+    }
+
+    write_json(
+        package_root / "manifest.json",
+        manifest,
+    )
+
+    write_json(
+        directories["specifications"]
+        / "primitive_dimensions.json",
+        dimension_rows,
+    )
+
+    write_dimensions_csv(
+        directories["specifications"]
+        / "primitive_dimensions.csv",
+        dimension_rows,
+    )
+
+    write_json(
+        directories["validation"]
+        / "mesh_validation.json",
+        validation_records,
+    )
+
+    (
+        directories["validation"]
+        / "manufacturing_warnings.md"
+    ).write_text(
+        warnings_markdown(
+            validation_records
+        ),
+        encoding="utf-8",
+    )
+
+    (
+        directories["specifications"]
+        / "manufacturing_specification.md"
+    ).write_text(
+        manufacturing_specification(
+            arguments
+        ),
+        encoding="utf-8",
+    )
+
+    (
+        package_root / "README.md"
+    ).write_text(
+        package_readme(),
+        encoding="utf-8",
+    )
+
+    zip_path = create_zip_archive(
+        package_root
+    )
+
+    return package_root, zip_path
+
+
+def main() -> None:
+    arguments = parse_arguments()
+
+    if arguments.quantity < 1:
+        raise SystemExit(
+            "--quantity must be at least 1."
+        )
+
+    if arguments.circle_segments < 24:
+        raise SystemExit(
+            "--circle-segments must be at least 24."
+        )
+
+    package_root, zip_path = export_package(
+        arguments
+    )
+
+    print()
+    print("Manufacturing package complete.")
+    print(f"Directory: {package_root}")
+    print(f"ZIP:       {zip_path}")
+    print()
+    print(
+        "Important: all STL files must be imported "
+        "as millimeters."
+    )
+
+
+if __name__ == "__main__":
+    main()

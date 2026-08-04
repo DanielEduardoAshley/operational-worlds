@@ -1,0 +1,242 @@
+[
+  {
+    "primitive_id": "PRIM-0001",
+    "primitive_name": "Raised Circle",
+    "validation": {
+      "vertex_count": 136,
+      "face_count": 72,
+      "unique_edge_count": 204,
+      "boundary_edge_count": 0,
+      "overused_edge_count": 0,
+      "zero_area_face_count": 0,
+      "topologically_closed_by_edge_count": true,
+      "warnings": [
+        "Primitive may contain overlapping closed shells; vendor Boolean-union or slicer verification is recommended."
+      ]
+    }
+  },
+  {
+    "primitive_id": "PRIM-0002",
+    "primitive_name": "Raised Triangle",
+    "validation": {
+      "vertex_count": 14,
+      "face_count": 11,
+      "unique_edge_count": 21,
+      "boundary_edge_count": 0,
+      "overused_edge_count": 0,
+      "zero_area_face_count": 0,
+      "topologically_closed_by_edge_count": true,
+      "warnings": [
+        "Primitive may contain overlapping closed shells; vendor Boolean-union or slicer verification is recommended."
+      ]
+    }
+  },
+  {
+    "primitive_id": "PRIM-0003",
+    "primitive_name": "Raised Square",
+    "validation": {
+      "vertex_count": 16,
+      "face_count": 12,
+      "unique_edge_count": 24,
+      "boundary_edge_count": 0,
+      "overused_edge_count": 0,
+      "zero_area_face_count": 0,
+      "topologically_closed_by_edge_count": true,
+      "warnings": [
+        "Primitive may contain overlapping closed shells; vendor Boolean-union or slicer verification is recommended."
+      ]
+    }
+  },
+  {
+    "primitive_id": "PRIM-0004",
+    "primitive_name": "Raised Hexagon",
+    "validation": {
+      "vertex_count": 20,
+      "face_count": 14,
+      "unique_edge_count": 30,
+      "boundary_edge_count": 0,
+      "overused_edge_count": 0,
+      "zero_area_face_count": 0,
+      "topologically_closed_by_edge_count": true,
+      "warnings": [
+        "Primitive may contain overlapping closed shells; vendor Boolean-union or slicer verification is recommended."
+      ]
+    }
+  },
+  {
+    "primitive_id": "PRIM-0005",
+    "primitive_name": "Slot",
+    "validation": {
+      "vertex_count": 280,
+      "face_count": 150,
+      "unique_edge_count": 420,
+      "boundary_edge_count": 0,
+      "overused_edge_count": 0,
+      "zero_area_face_count": 0,
+      "topologically_closed_by_edge_count": true,
+      "warnings": [
+        "Primitive may contain overlapping closed shells; vendor Boolean-union or slicer verification is recommended."
+      ]
+    }
+  },
+  {
+    "primitive_id": "PRIM-0006",
+    "primitive_name": "Hinge",
+    "validation": {
+      "vertex_count": 664,
+      "face_count": 348,
+      "unique_edge_count": 996,
+      "boundary_edge_count": 0,
+      "overused_edge_count": 0,
+      "zero_area_face_count": 0,
+      "topologically_closed_by_edge_count": true,
+      "warnings": [
+        "Primitive may contain overlapping closed shells; vendor Boolean-union or slicer verification is recommended."
+      ]
+    }
+  },
+  {
+    "primitive_id": "PRIM-0007",
+    "primitive_name": "Fold",
+    "validation": {
+      "vertex_count": 24,
+      "face_count": 18,
+      "unique_edge_count": 36,
+      "boundary_edge_count": 0,
+      "overused_edge_count": 0,
+      "zero_area_face_count": 0,
+      "topologically_closed_by_edge_count": true,
+      "warnings": [
+        "Primitive may contain overlapping closed shells; vendor Boolean-union or slicer verification is recommended."
+      ]
+    }
+  },
+  {
+    "primitive_id": "PRIM-0008",
+    "primitive_name": "Aperture",
+    "validation": {
+      "vertex_count": 256,
+      "face_count": 256,
+      "unique_edge_count": 512,
+      "boundary_edge_count": 0,
+      "overused_edge_count": 0,
+      "zero_area_face_count": 0,
+      "topologically_closed_by_edge_count": true,
+      "warnings": [
+        "Primitive may contain overlapping closed shells; vendor Boolean-union or slicer verification is recommended."
+      ]
+    }
+  },
+  {
+    "primitive_id": "PRIM-0009",
+    "primitive_name": "Lens",
+    "validation": {
+      "vertex_count": 1033,
+      "face_count": 969,
+      "unique_edge_count": 1996,
+      "boundary_edge_count": 0,
+      "overused_edge_count": 0,
+      "zero_area_face_count": 0,
+      "topologically_closed_by_edge_count": true,
+      "warnings": [
+        "Primitive may contain overlapping closed shells; vendor Boolean-union or slicer verification is recommended."
+      ]
+    }
+  },
+  {
+    "primitive_id": "PRIM-0010",
+    "primitive_name": "Mirror",
+    "validation": {
+      "vertex_count": 48,
+      "face_count": 36,
+      "unique_edge_count": 72,
+      "boundary_edge_count": 0,
+      "overused_edge_count": 0,
+      "zero_area_face_count": 0,
+      "topologically_closed_by_edge_count": true,
+      "warnings": [
+        "Primitive may contain overlapping closed shells; vendor Boolean-union or slicer verification is recommended."
+      ]
+    }
+  },
+  {
+    "primitive_id": "PRIM-0011",
+    "primitive_name": "Light Source",
+    "validation": {
+      "vertex_count": 264,
+      "face_count": 138,
+      "unique_edge_count": 396,
+      "boundary_edge_count": 0,
+      "overused_edge_count": 0,
+      "zero_area_face_count": 0,
+      "topologically_closed_by_edge_count": true,
+      "warnings": [
+        "Primitive may contain overlapping closed shells; vendor Boolean-union or slicer verification is recommended."
+      ]
+    }
+  },
+  {
+    "primitive_id": "PRIM-0012",
+    "primitive_name": "Weight",
+    "validation": {
+      "vertex_count": 392,
+      "face_count": 204,
+      "unique_edge_count": 588,
+      "boundary_edge_count": 0,
+      "overused_edge_count": 0,
+      "zero_area_face_count": 0,
+      "topologically_closed_by_edge_count": true,
+      "warnings": [
+        "Primitive may contain overlapping closed shells; vendor Boolean-union or slicer verification is recommended."
+      ]
+    }
+  },
+  {
+    "primitive_id": "PRIM-0013",
+    "primitive_name": "Threshold",
+    "validation": {
+      "vertex_count": 32,
+      "face_count": 24,
+      "unique_edge_count": 48,
+      "boundary_edge_count": 0,
+      "overused_edge_count": 0,
+      "zero_area_face_count": 0,
+      "topologically_closed_by_edge_count": true,
+      "warnings": [
+        "Primitive may contain overlapping closed shells; vendor Boolean-union or slicer verification is recommended."
+      ]
+    }
+  },
+  {
+    "primitive_id": "PRIM-0014",
+    "primitive_name": "Sensor",
+    "validation": {
+      "vertex_count": 392,
+      "face_count": 204,
+      "unique_edge_count": 588,
+      "boundary_edge_count": 0,
+      "overused_edge_count": 0,
+      "zero_area_face_count": 0,
+      "topologically_closed_by_edge_count": true,
+      "warnings": [
+        "Primitive may contain overlapping closed shells; vendor Boolean-union or slicer verification is recommended."
+      ]
+    }
+  },
+  {
+    "primitive_id": "PRIM-0015",
+    "primitive_name": "Handle",
+    "validation": {
+      "vertex_count": 288,
+      "face_count": 156,
+      "unique_edge_count": 432,
+      "boundary_edge_count": 0,
+      "overused_edge_count": 0,
+      "zero_area_face_count": 0,
+      "topologically_closed_by_edge_count": true,
+      "warnings": [
+        "Primitive may contain overlapping closed shells; vendor Boolean-union or slicer verification is recommended."
+      ]
+    }
+  }
+]
