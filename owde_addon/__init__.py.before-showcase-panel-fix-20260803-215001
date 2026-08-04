@@ -4,7 +4,7 @@ bl_info = {
     "version": (0, 5, 0),
     "blender": (4, 2, 0),
     "location": "View3D > Sidebar > Operational Worlds",
-    "description": "Create, inspect, render, and export parametric Operational Worlds primitives",
+    "description": "Create and inspect parametric Operational Worlds tiles",
     "category": "Add Mesh",
 }
 
@@ -14,12 +14,10 @@ def register() -> None:
 
     from .blender import (
         OWDE_OT_create_primitive_gallery,
-        OWDE_OT_create_showcase,
         OWDE_OT_create_tile,
         OWDE_OT_frame_primitive_gallery,
         OWDE_PG_settings,
         OWDE_PT_primitive_inspector,
-        OWDE_PT_showcase,
         OWDE_PT_tile_builder,
     )
 
@@ -28,10 +26,8 @@ def register() -> None:
         OWDE_OT_create_tile,
         OWDE_OT_create_primitive_gallery,
         OWDE_OT_frame_primitive_gallery,
-        OWDE_OT_create_showcase,
         OWDE_PT_tile_builder,
         OWDE_PT_primitive_inspector,
-        OWDE_PT_showcase,
     )
 
     for class_ in classes:
@@ -47,12 +43,10 @@ def unregister() -> None:
 
     from .blender import (
         OWDE_OT_create_primitive_gallery,
-        OWDE_OT_create_showcase,
         OWDE_OT_create_tile,
         OWDE_OT_frame_primitive_gallery,
         OWDE_PG_settings,
         OWDE_PT_primitive_inspector,
-        OWDE_PT_showcase,
         OWDE_PT_tile_builder,
     )
 
@@ -64,10 +58,8 @@ def unregister() -> None:
         OWDE_OT_create_tile,
         OWDE_OT_create_primitive_gallery,
         OWDE_OT_frame_primitive_gallery,
-        OWDE_OT_create_showcase,
         OWDE_PT_tile_builder,
         OWDE_PT_primitive_inspector,
-        OWDE_PT_showcase,
     )
 
     for class_ in reversed(classes):

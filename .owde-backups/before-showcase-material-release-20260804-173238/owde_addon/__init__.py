@@ -4,7 +4,7 @@ bl_info = {
     "version": (0, 5, 0),
     "blender": (4, 2, 0),
     "location": "View3D > Sidebar > Operational Worlds",
-    "description": "Create, inspect, render, and export parametric Operational Worlds primitives",
+    "description": "Create and inspect parametric Operational Worlds tiles",
     "category": "Add Mesh",
 }
 

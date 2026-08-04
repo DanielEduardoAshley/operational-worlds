@@ -91,7 +91,7 @@ class OWDE_PT_tile_builder(bpy.types.Panel):
         )
 
         gallery_box.label(
-            text="OW01-OW15"
+            text="OW01-OW10"
         )
 
         gallery_box.prop(

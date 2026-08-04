@@ -283,10 +283,11 @@ def configure_render(
 def resolve_output_directory(
     requested_value: str,
 ) -> Path:
-    """Resolve a user-writable output directory without Blender path helpers.
+    """Resolve a user-writable output directory without bpy.path.abspath.
 
-    Blender's `//` prefix can resolve unsaved-file paths inside Blender.app
-    on macOS. This function deliberately uses Path.home() instead.
+    `bpy.path.abspath()` treats Blender's `//` prefix specially and can
+    resolve unsaved-file paths inside Blender.app on macOS. This function
+    deliberately uses Path.home() instead.
     """
 
     requested = requested_value.strip()

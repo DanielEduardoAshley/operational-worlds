@@ -1,3 +1,466 @@
+python3 <<'PY'
+from __future__ import annotations
+
+from datetime import datetime
+from pathlib import Path
+import shutil
+
+
+FILES = (
+    Path("owde_addon/__init__.py"),
+    Path("owde_addon/blender/__init__.py"),
+    Path("owde_addon/blender/showcase.py"),
+    Path("owde_addon/blender/materials.py"),
+    Path("owde_addon/blender/panel.py"),
+    Path("owde_addon/blender/operators.py"),
+)
+
+missing = [path for path in FILES if not path.exists()]
+
+if missing:
+    raise SystemExit(
+        "Run this command from the operational-worlds repository root.\n"
+        "Missing files:\n"
+        + "\n".join(f"  - {path}" for path in missing)
+    )
+
+timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+
+backup_root = (
+    Path(".owde-backups")
+    / f"before-showcase-material-release-{timestamp}"
+)
+
+for source in FILES:
+    destination = backup_root / source
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(source, destination)
+
+print(f"Backup created at: {backup_root}")
+PY
+
+cat > owde_addon/blender/materials.py <<'PY'
+from __future__ import annotations
+
+import bpy
+
+from ..core.models import ShapeType
+
+
+SPECIAL_FEATURE_SHAPES = {
+    ShapeType.LENS,
+    ShapeType.MIRROR,
+    ShapeType.LIGHT_SOURCE,
+    ShapeType.WEIGHT,
+    ShapeType.SENSOR,
+}
+
+
+def _principled(
+    material: bpy.types.Material,
+):
+    if not material.use_nodes:
+        material.use_nodes = True
+
+    return material.node_tree.nodes.get(
+        "Principled BSDF"
+    )
+
+
+def _input(
+    node,
+    *names: str,
+):
+    if node is None:
+        return None
+
+    for name in names:
+        value = node.inputs.get(name)
+
+        if value is not None:
+            return value
+
+    return None
+
+
+def _set_input(
+    node,
+    names: tuple[str, ...],
+    value,
+) -> None:
+    input_ = _input(node, *names)
+
+    if input_ is not None:
+        input_.default_value = value
+
+
+def get_or_create_tile_material() -> bpy.types.Material:
+    name = "OWDE Tile"
+
+    material = bpy.data.materials.get(name)
+
+    if material is None:
+        material = bpy.data.materials.new(name)
+
+    material.use_nodes = True
+
+    principled = _principled(material)
+
+    _set_input(
+        principled,
+        ("Base Color",),
+        (0.72, 0.69, 0.64, 1.0),
+    )
+    _set_input(
+        principled,
+        ("Metallic",),
+        0.0,
+    )
+    _set_input(
+        principled,
+        ("Roughness",),
+        0.58,
+    )
+
+    return material
+
+
+def get_or_create_dark_insert_material() -> bpy.types.Material:
+    name = "OWDE Dark Insert"
+
+    material = bpy.data.materials.get(name)
+
+    if material is None:
+        material = bpy.data.materials.new(name)
+
+    material.use_nodes = True
+
+    principled = _principled(material)
+
+    _set_input(
+        principled,
+        ("Base Color",),
+        (0.004, 0.005, 0.007, 1.0),
+    )
+    _set_input(
+        principled,
+        ("Metallic",),
+        0.04,
+    )
+    _set_input(
+        principled,
+        ("Roughness",),
+        0.68,
+    )
+
+    return material
+
+
+def get_or_create_clear_lens_material() -> bpy.types.Material:
+    name = "OWDE Clear Lens"
+
+    material = bpy.data.materials.get(name)
+
+    if material is None:
+        material = bpy.data.materials.new(name)
+
+    material.use_nodes = True
+    material.diffuse_color = (
+        0.88,
+        0.96,
+        1.0,
+        0.38,
+    )
+
+    principled = _principled(material)
+
+    _set_input(
+        principled,
+        ("Base Color",),
+        (0.92, 0.98, 1.0, 1.0),
+    )
+    _set_input(
+        principled,
+        ("Metallic",),
+        0.0,
+    )
+    _set_input(
+        principled,
+        ("Roughness",),
+        0.055,
+    )
+    _set_input(
+        principled,
+        ("Transmission Weight", "Transmission"),
+        0.96,
+    )
+    _set_input(
+        principled,
+        ("IOR",),
+        1.45,
+    )
+    _set_input(
+        principled,
+        ("Coat Weight", "Clearcoat"),
+        0.28,
+    )
+
+    return material
+
+
+def get_or_create_frosted_light_material() -> bpy.types.Material:
+    name = "OWDE Frosted Light"
+
+    material = bpy.data.materials.get(name)
+
+    if material is None:
+        material = bpy.data.materials.new(name)
+
+    material.use_nodes = True
+    material.diffuse_color = (
+        1.0,
+        0.76,
+        0.42,
+        1.0,
+    )
+
+    principled = _principled(material)
+
+    _set_input(
+        principled,
+        ("Base Color",),
+        (1.0, 0.83, 0.58, 1.0),
+    )
+    _set_input(
+        principled,
+        ("Metallic",),
+        0.0,
+    )
+    _set_input(
+        principled,
+        ("Roughness",),
+        0.31,
+    )
+    _set_input(
+        principled,
+        ("Transmission Weight", "Transmission"),
+        0.16,
+    )
+    _set_input(
+        principled,
+        ("Emission Color", "Emission"),
+        (1.0, 0.34, 0.055, 1.0),
+    )
+    _set_input(
+        principled,
+        ("Emission Strength",),
+        3.5,
+    )
+
+    return material
+
+
+def get_or_create_brushed_steel_material() -> bpy.types.Material:
+    name = "OWDE Brushed Steel"
+
+    material = bpy.data.materials.get(name)
+
+    if material is None:
+        material = bpy.data.materials.new(name)
+
+    material.use_nodes = True
+
+    principled = _principled(material)
+
+    _set_input(
+        principled,
+        ("Base Color",),
+        (0.26, 0.28, 0.30, 1.0),
+    )
+    _set_input(
+        principled,
+        ("Metallic",),
+        0.94,
+    )
+    _set_input(
+        principled,
+        ("Roughness",),
+        0.24,
+    )
+    _set_input(
+        principled,
+        ("Anisotropic IOR Level", "Anisotropic"),
+        0.42,
+    )
+    _set_input(
+        principled,
+        ("Coat Weight", "Clearcoat"),
+        0.12,
+    )
+
+    return material
+
+
+def get_or_create_sensor_material() -> bpy.types.Material:
+    name = "OWDE Piano Black Sensor"
+
+    material = bpy.data.materials.get(name)
+
+    if material is None:
+        material = bpy.data.materials.new(name)
+
+    material.use_nodes = True
+
+    principled = _principled(material)
+
+    _set_input(
+        principled,
+        ("Base Color",),
+        (0.002, 0.003, 0.005, 1.0),
+    )
+    _set_input(
+        principled,
+        ("Metallic",),
+        0.08,
+    )
+    _set_input(
+        principled,
+        ("Roughness",),
+        0.045,
+    )
+    _set_input(
+        principled,
+        ("Coat Weight", "Clearcoat"),
+        0.82,
+    )
+    _set_input(
+        principled,
+        ("Coat Roughness", "Clearcoat Roughness"),
+        0.025,
+    )
+
+    return material
+
+
+def get_or_create_mirror_material() -> bpy.types.Material:
+    name = "OWDE Mirror Chrome"
+
+    material = bpy.data.materials.get(name)
+
+    if material is None:
+        material = bpy.data.materials.new(name)
+
+    material.use_nodes = True
+
+    principled = _principled(material)
+
+    _set_input(
+        principled,
+        ("Base Color",),
+        (0.86, 0.88, 0.91, 1.0),
+    )
+    _set_input(
+        principled,
+        ("Metallic",),
+        1.0,
+    )
+    _set_input(
+        principled,
+        ("Roughness",),
+        0.025,
+    )
+
+    return material
+
+
+def feature_material_for_shape(
+    shape: ShapeType,
+) -> bpy.types.Material:
+    if shape is ShapeType.LENS:
+        return get_or_create_clear_lens_material()
+
+    if shape is ShapeType.MIRROR:
+        return get_or_create_mirror_material()
+
+    if shape is ShapeType.LIGHT_SOURCE:
+        return get_or_create_frosted_light_material()
+
+    if shape is ShapeType.WEIGHT:
+        return get_or_create_brushed_steel_material()
+
+    if shape is ShapeType.SENSOR:
+        return get_or_create_sensor_material()
+
+    return get_or_create_tile_material()
+
+
+def assign_canonical_materials(
+    object_: bpy.types.Object,
+    shape: ShapeType,
+    tile_height_mm: float,
+) -> None:
+    """Assign tile and feature materials within one combined mesh.
+
+    OWDE core geometry combines separate closed shells into one MeshData.
+    The base occupies Z=0 through tile_height_mm. A polygon belongs to
+    the special feature when it includes at least one vertex above that
+    height.
+
+    This leaves the base tile off-white while assigning glass, chrome,
+    emissive, metal, or piano-black material only to raised geometry.
+    """
+
+    mesh = object_.data
+    mesh.materials.clear()
+
+    tile_material = get_or_create_tile_material()
+    mesh.materials.append(tile_material)
+
+    if shape not in SPECIAL_FEATURE_SHAPES:
+        for polygon in mesh.polygons:
+            polygon.material_index = 0
+
+        return
+
+    feature_material = feature_material_for_shape(shape)
+    mesh.materials.append(feature_material)
+
+    tile_height_m = tile_height_mm * 0.001
+    epsilon = 0.000001
+
+    for polygon in mesh.polygons:
+        vertex_heights = [
+            mesh.vertices[index].co.z
+            for index in polygon.vertices
+        ]
+
+        is_feature = any(
+            height > tile_height_m + epsilon
+            for height in vertex_heights
+        )
+
+        polygon.material_index = (
+            1 if is_feature else 0
+        )
+
+
+def assign_shape_material(
+    object_: bpy.types.Object,
+    shape: ShapeType,
+) -> None:
+    """Compatibility wrapper for older callers.
+
+    Showcase code should use assign_canonical_materials so the base and
+    feature receive different materials.
+    """
+
+    material = feature_material_for_shape(shape)
+
+    object_.data.materials.clear()
+    object_.data.materials.append(material)
+PY
+
+cat > owde_addon/blender/showcase.py <<'PY'
 from __future__ import annotations
 
 from pathlib import Path
@@ -283,10 +746,11 @@ def configure_render(
 def resolve_output_directory(
     requested_value: str,
 ) -> Path:
-    """Resolve a user-writable output directory without Blender path helpers.
+    """Resolve a user-writable output directory without bpy.path.abspath.
 
-    Blender's `//` prefix can resolve unsaved-file paths inside Blender.app
-    on macOS. This function deliberately uses Path.home() instead.
+    `bpy.path.abspath()` treats Blender's `//` prefix specially and can
+    resolve unsaved-file paths inside Blender.app on macOS. This function
+    deliberately uses Path.home() instead.
     """
 
     requested = requested_value.strip()
@@ -1122,3 +1586,224 @@ class OWDE_PT_showcase(bpy.types.Panel):
             ),
             icon="FILE_FOLDER",
         )
+PY
+
+python3 <<'PY'
+from pathlib import Path
+import re
+
+
+operators_path = Path(
+    "owde_addon/blender/operators.py"
+)
+
+operators = operators_path.read_text(
+    encoding="utf-8"
+)
+
+operators, count = re.subn(
+    r'OWDE_VERSION\s*=\s*"[^"]+"',
+    'OWDE_VERSION = "0.5.0-alpha.2"',
+    operators,
+    count=1,
+)
+
+if count != 1:
+    raise SystemExit(
+        "Could not update OWDE_VERSION in operators.py."
+    )
+
+operators_path.write_text(
+    operators,
+    encoding="utf-8",
+)
+
+
+panel_path = Path(
+    "owde_addon/blender/panel.py"
+)
+
+panel = panel_path.read_text(
+    encoding="utf-8"
+)
+
+panel = panel.replace(
+    'text="OW01-OW10"',
+    'text="OW01-OW15"',
+)
+
+panel_path.write_text(
+    panel,
+    encoding="utf-8",
+)
+
+
+addon_init_path = Path(
+    "owde_addon/__init__.py"
+)
+
+addon_init = addon_init_path.read_text(
+    encoding="utf-8"
+)
+
+addon_init = re.sub(
+    r'("description"\s*:\s*)"[^"]+"',
+    (
+        r'\g<1>'
+        '"Create, inspect, render, and export '
+        'parametric Operational Worlds primitives"'
+    ),
+    addon_init,
+    count=1,
+)
+
+addon_init_path.write_text(
+    addon_init,
+    encoding="utf-8",
+)
+
+print("Updated OWDE metadata to 0.5.0-alpha.2.")
+print("Updated gallery label to OW01-OW15.")
+PY
+
+mkdir -p tests docs/releases
+
+cat > tests/test_showcase_release.py <<'PY'
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[1]
+
+SHOWCASE_PATH = (
+    ROOT
+    / "owde_addon"
+    / "blender"
+    / "showcase.py"
+)
+
+MATERIALS_PATH = (
+    ROOT
+    / "owde_addon"
+    / "blender"
+    / "materials.py"
+)
+
+
+def test_showcase_avoids_bpy_path_abspath() -> None:
+    source = SHOWCASE_PATH.read_text(
+        encoding="utf-8"
+    )
+
+    assert "bpy.path.abspath" not in source
+
+
+def test_showcase_has_home_directory_fallback() -> None:
+    source = SHOWCASE_PATH.read_text(
+        encoding="utf-8"
+    )
+
+    assert "Path.home()" in source
+    assert "OWDE_Showcase_Exports" in source
+
+
+def test_showcase_renders_individual_primitives() -> None:
+    source = SHOWCASE_PATH.read_text(
+        encoding="utf-8"
+    )
+
+    assert "render_individuals" in source
+    assert '"individual"' in source
+
+
+def test_showcase_saves_blend_copy() -> None:
+    source = SHOWCASE_PATH.read_text(
+        encoding="utf-8"
+    )
+
+    assert "OWDE_Showcase.blend" in source
+    assert "save_as_mainfile" in source
+
+
+def test_material_assignment_separates_tile_and_feature() -> None:
+    source = MATERIALS_PATH.read_text(
+        encoding="utf-8"
+    )
+
+    assert "assign_canonical_materials" in source
+    assert "polygon.material_index" in source
+
+
+def test_required_canonical_materials_exist() -> None:
+    source = MATERIALS_PATH.read_text(
+        encoding="utf-8"
+    )
+
+    expected_names = (
+        "OWDE Tile",
+        "OWDE Clear Lens",
+        "OWDE Frosted Light",
+        "OWDE Brushed Steel",
+        "OWDE Piano Black Sensor",
+        "OWDE Mirror Chrome",
+        "OWDE Dark Insert",
+    )
+
+    for name in expected_names:
+        assert name in source
+PY
+
+cat > docs/releases/OWDE_0.5.0-alpha.2.md <<'MD'
+# OWDE 0.5.0-alpha.2
+
+## Canonical Material Showcase
+
+This release completes the first material-aware Operational Worlds
+documentation showcase.
+
+## Fixes
+
+- Removed Blender-relative output resolution from the showcase.
+- Prevented unsaved Blender files from resolving output paths inside
+  the macOS Blender application bundle.
+- Added a user-home fallback when the requested directory cannot be
+  created or written.
+
+## Material assignment
+
+The showcase now retains the matte off-white tile material while
+assigning canonical feature materials only to raised feature polygons.
+
+Canonical materials:
+
+- OWDE Tile
+- OWDE Clear Lens
+- OWDE Frosted Light
+- OWDE Brushed Steel
+- OWDE Piano Black Sensor
+- OWDE Mirror Chrome
+- OWDE Dark Insert
+
+## Showcase output
+
+The full render command generates:
+
+```text
+~/Documents/OperationalWorlds/exports/showcase/
+├── OWDE_Primitive_Showcase.png
+├── OWDE_Showcase.blend
+└── individual/
+    ├── PRIM-0001_Raised_Circle.png
+    ├── PRIM-0002_Raised_Triangle.png
+    ├── PRIM-0003_Raised_Square.png
+    ├── PRIM-0004_Raised_Hexagon.png
+    ├── PRIM-0005_Slot.png
+    ├── PRIM-0006_Hinge.png
+    ├── PRIM-0007_Fold.png
+    ├── PRIM-0008_Aperture.png
+    ├── PRIM-0009_Lens.png
+    ├── PRIM-0010_Mirror.png
+    ├── PRIM-0011_Light_Source.png
+    ├── PRIM-0012_Weight.png
+    ├── PRIM-0013_Threshold.png
+    ├── PRIM-0014_Sensor.png
+    └── PRIM-0015_Handle.png
