@@ -1,0 +1,1903 @@
+python3 <<'PY'
+from __future__ import annotations
+
+from datetime import datetime
+from pathlib import Path
+import re
+import shutil
+import textwrap
+
+
+REQUIRED_FILES = (
+    Path("owde_addon/core/builders.py"),
+    Path("owde_addon/core/models.py"),
+    Path("owde_addon/blender/operators.py"),
+    Path("owde_addon/blender/panel.py"),
+    Path("owde_addon/blender/__init__.py"),
+    Path("tests/test_builders.py"),
+    Path("scripts/build_addon.py"),
+)
+
+missing = [
+    path
+    for path in REQUIRED_FILES
+    if not path.exists()
+]
+
+if missing:
+    raise SystemExit(
+        "Run this from the OWDE repository root.\n\n"
+        "Missing required files:\n"
+        + "\n".join(f"  - {path}" for path in missing)
+    )
+
+timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+backup_root = (
+    Path(".owde-backups")
+    / f"before-owde-0.5.0-alpha.1-{timestamp}"
+)
+
+for source in REQUIRED_FILES:
+    destination = backup_root / source
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(source, destination)
+
+print(f"Backup created at: {backup_root}")
+
+
+def read(path: Path) -> str:
+    return path.read_text(encoding="utf-8")
+
+
+def write(path: Path, value: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(value, encoding="utf-8")
+
+
+def replace_function(
+    source: str,
+    function_name: str,
+    replacement: str,
+) -> str:
+    pattern = re.compile(
+        rf"^def {re.escape(function_name)}\("
+        rf".*?"
+        rf"(?=^def |\Z)",
+        re.MULTILINE | re.DOTALL,
+    )
+
+    updated, count = pattern.subn(
+        replacement.rstrip() + "\n\n",
+        source,
+        count=1,
+    )
+
+    if count != 1:
+        raise SystemExit(
+            f"Could not replace {function_name}().\n"
+            f"Restore from: {backup_root}"
+        )
+
+    return updated
+
+
+# =====================================================================
+# Core geometry
+# =====================================================================
+
+builders_path = Path("owde_addon/core/builders.py")
+builders = read(builders_path)
+
+geometry_helpers = r'''
+def rotate_mesh_z(
+    mesh: MeshData,
+    angle_degrees: float,
+) -> MeshData:
+    """Rotate a mesh around the vertical Z axis."""
+
+    angle = math.radians(angle_degrees)
+    cosine = math.cos(angle)
+    sine = math.sin(angle)
+
+    result = MeshData(
+        vertices=tuple(
+            (
+                vertex[0] * cosine - vertex[1] * sine,
+                vertex[0] * sine + vertex[1] * cosine,
+                vertex[2],
+            )
+            for vertex in mesh.vertices
+        ),
+        faces=mesh.faces,
+    )
+
+    result.validate()
+    return result
+
+
+def rotational_profile_mesh(
+    *,
+    profile: tuple[tuple[float, float], ...],
+    segments: int,
+) -> MeshData:
+    """Revolve a radius/Z profile around the vertical axis.
+
+    The profile must begin and end on the rotation axis or include an
+    explicit bottom radius suitable for closing the mesh.
+    """
+
+    if len(profile) < 3:
+        raise ValueError(
+            "A rotational profile requires at least three points."
+        )
+
+    if segments < 24:
+        raise ValueError(
+            "A rotational profile requires at least 24 segments."
+        )
+
+    vertices: list[Point3D] = []
+    faces: list[tuple[int, ...]] = []
+
+    ring_indices: list[list[int]] = []
+
+    for radius_mm, z_mm in profile:
+        if radius_mm < 0:
+            raise ValueError(
+                "Profile radius cannot be negative."
+            )
+
+        if math.isclose(radius_mm, 0.0, abs_tol=1e-9):
+            index = len(vertices)
+            vertices.append((0.0, 0.0, z_mm))
+            ring_indices.append([index])
+            continue
+
+        ring: list[int] = []
+
+        for segment_index in range(segments):
+            angle = (
+                2.0
+                * math.pi
+                * segment_index
+                / segments
+            )
+
+            ring.append(len(vertices))
+            vertices.append(
+                (
+                    radius_mm * math.cos(angle),
+                    radius_mm * math.sin(angle),
+                    z_mm,
+                )
+            )
+
+        ring_indices.append(ring)
+
+    for first_ring, second_ring in zip(
+        ring_indices,
+        ring_indices[1:],
+    ):
+        first_is_point = len(first_ring) == 1
+        second_is_point = len(second_ring) == 1
+
+        if first_is_point and second_is_point:
+            continue
+
+        if first_is_point:
+            point = first_ring[0]
+
+            for index in range(segments):
+                next_index = (index + 1) % segments
+                faces.append(
+                    (
+                        point,
+                        second_ring[index],
+                        second_ring[next_index],
+                    )
+                )
+
+            continue
+
+        if second_is_point:
+            point = second_ring[0]
+
+            for index in range(segments):
+                next_index = (index + 1) % segments
+                faces.append(
+                    (
+                        first_ring[index],
+                        point,
+                        first_ring[next_index],
+                    )
+                )
+
+            continue
+
+        for index in range(segments):
+            next_index = (index + 1) % segments
+            faces.append(
+                (
+                    first_ring[index],
+                    second_ring[index],
+                    second_ring[next_index],
+                    first_ring[next_index],
+                )
+            )
+
+    result = MeshData(
+        vertices=tuple(vertices),
+        faces=tuple(faces),
+    )
+    result.validate()
+    return result
+
+
+def build_water_droplet_mesh(
+    *,
+    diameter_mm: float,
+    rise_mm: float,
+    base_z_mm: float,
+    radial_segments: int,
+    profile_segments: int = 18,
+) -> MeshData:
+    """Build a circular, rotationally symmetric surface-tension droplet.
+
+    The footprint is circular from above. The surface blends directly
+    into the supporting plane and reaches its maximum height at center.
+    """
+
+    if diameter_mm <= 0:
+        raise ValueError(
+            "Droplet diameter must be greater than zero."
+        )
+
+    if rise_mm <= 0:
+        raise ValueError(
+            "Droplet rise must be greater than zero."
+        )
+
+    radius = diameter_mm / 2.0
+
+    profile: list[tuple[float, float]] = [
+        (0.0, base_z_mm),
+        (radius, base_z_mm),
+    ]
+
+    # Travel from the perimeter toward the center. A smoothstep-style
+    # curve produces a gentle meniscus and a rounded central crown.
+    for index in range(1, profile_segments):
+        fraction = index / profile_segments
+        local_radius = radius * (1.0 - fraction)
+
+        smooth = (
+            fraction
+            * fraction
+            * (3.0 - 2.0 * fraction)
+        )
+
+        crown = smooth ** 0.82
+
+        profile.append(
+            (
+                local_radius,
+                base_z_mm + rise_mm * crown,
+            )
+        )
+
+    profile.append(
+        (
+            0.0,
+            base_z_mm + rise_mm,
+        )
+    )
+
+    return rotational_profile_mesh(
+        profile=tuple(profile),
+        segments=radial_segments,
+    )
+
+
+def build_light_bulb_mesh(
+    *,
+    bulb_radius_mm: float,
+    bulb_height_mm: float,
+    neck_radius_mm: float,
+    neck_height_mm: float,
+    base_z_mm: float,
+    radial_segments: int,
+) -> MeshData:
+    """Build a squat bulb with a short neck and rounded crown."""
+
+    if bulb_radius_mm <= 0:
+        raise ValueError(
+            "Bulb radius must be greater than zero."
+        )
+
+    if bulb_height_mm <= 0:
+        raise ValueError(
+            "Bulb height must be greater than zero."
+        )
+
+    if neck_radius_mm <= 0:
+        raise ValueError(
+            "Neck radius must be greater than zero."
+        )
+
+    neck_top = base_z_mm + neck_height_mm
+    crown_top = neck_top + bulb_height_mm
+
+    profile = (
+        (0.0, base_z_mm),
+        (neck_radius_mm, base_z_mm),
+        (neck_radius_mm, neck_top),
+        (bulb_radius_mm * 0.74, neck_top + bulb_height_mm * 0.08),
+        (bulb_radius_mm * 0.94, neck_top + bulb_height_mm * 0.30),
+        (bulb_radius_mm, neck_top + bulb_height_mm * 0.48),
+        (bulb_radius_mm * 0.92, neck_top + bulb_height_mm * 0.70),
+        (bulb_radius_mm * 0.66, neck_top + bulb_height_mm * 0.90),
+        (0.0, crown_top),
+    )
+
+    return rotational_profile_mesh(
+        profile=profile,
+        segments=radial_segments,
+    )
+
+
+def build_sensor_dome_mesh(
+    *,
+    sphere_radius_mm: float,
+    exposed_height_mm: float,
+    base_z_mm: float,
+    radial_segments: int,
+    profile_segments: int = 12,
+) -> MeshData:
+    """Build the exposed upper portion of a sphere."""
+
+    if sphere_radius_mm <= 0:
+        raise ValueError(
+            "Sensor radius must be greater than zero."
+        )
+
+    exposed_height_mm = min(
+        exposed_height_mm,
+        sphere_radius_mm,
+    )
+
+    profile: list[tuple[float, float]] = [
+        (0.0, base_z_mm),
+    ]
+
+    for index in range(profile_segments + 1):
+        fraction = index / profile_segments
+
+        z_from_center = (
+            sphere_radius_mm
+            - exposed_height_mm
+            + exposed_height_mm * fraction
+        )
+
+        ring_radius = math.sqrt(
+            max(
+                0.0,
+                sphere_radius_mm ** 2
+                - z_from_center ** 2,
+            )
+        )
+
+        profile.append(
+            (
+                ring_radius,
+                base_z_mm
+                + exposed_height_mm * fraction,
+            )
+        )
+
+    profile.append(
+        (
+            0.0,
+            base_z_mm + exposed_height_mm,
+        )
+    )
+
+    return rotational_profile_mesh(
+        profile=tuple(profile),
+        segments=radial_segments,
+    )
+'''
+
+if "def build_water_droplet_mesh(" not in builders:
+    marker = "\ndef build_lens_mesh(\n"
+
+    if marker not in builders:
+        raise SystemExit(
+            "Could not locate build_lens_mesh() in builders.py."
+        )
+
+    builders = builders.replace(
+        marker,
+        "\n" + geometry_helpers.strip() + "\n\n"
+        + "def build_lens_mesh(\n",
+        1,
+    )
+
+
+lens_function = r'''
+def build_lens_mesh(
+    parameters: TileParameters,
+) -> MeshData:
+    """Build OW09 as a uniform surface-tension lens.
+
+    From above, the lens is perfectly circular. Its convex surface rises
+    directly from the tile without a separate pedestal.
+    """
+
+    base = square_tile_base(parameters)
+
+    diameter_mm = parameters.shape_width_mm * 0.78
+
+    rise_mm = min(
+        parameters.shape_height_mm * 1.55,
+        diameter_mm * 0.28,
+    )
+
+    droplet = build_water_droplet_mesh(
+        diameter_mm=diameter_mm,
+        rise_mm=rise_mm,
+        base_z_mm=parameters.tile_height_mm,
+        radial_segments=max(
+            48,
+            parameters.circle_segments,
+        ),
+    )
+
+    return combine_meshes(
+        base,
+        droplet,
+    )
+'''
+
+builders = replace_function(
+    builders,
+    "build_lens_mesh",
+    lens_function,
+)
+
+
+light_function = r'''
+def build_light_source_mesh(
+    parameters: TileParameters,
+) -> MeshData:
+    """Build OW11 as a low, squat bulb with a short neck."""
+
+    base = square_tile_base(parameters)
+
+    bulb_radius_mm = parameters.shape_width_mm * 0.31
+
+    bulb_height_mm = min(
+        parameters.shape_height_mm * 2.15,
+        bulb_radius_mm * 1.30,
+    )
+
+    neck_radius_mm = bulb_radius_mm * 0.48
+
+    neck_height_mm = max(
+        2.0,
+        parameters.shape_height_mm * 0.38,
+    )
+
+    mounting_ring = transform_mesh(
+        cylinder_mesh(
+            radius_mm=bulb_radius_mm * 0.72,
+            length_mm=max(
+                1.0,
+                parameters.shape_height_mm * 0.18,
+            ),
+            segments=max(
+                48,
+                parameters.circle_segments,
+            ),
+            axis="Z",
+        ),
+        translate_z_mm=parameters.tile_height_mm,
+    )
+
+    bulb = build_light_bulb_mesh(
+        bulb_radius_mm=bulb_radius_mm,
+        bulb_height_mm=bulb_height_mm,
+        neck_radius_mm=neck_radius_mm,
+        neck_height_mm=neck_height_mm,
+        base_z_mm=(
+            parameters.tile_height_mm
+            + max(
+                1.0,
+                parameters.shape_height_mm * 0.18,
+            )
+        ),
+        radial_segments=max(
+            48,
+            parameters.circle_segments,
+        ),
+    )
+
+    return combine_meshes(
+        base,
+        mounting_ring,
+        bulb,
+    )
+'''
+
+builders = replace_function(
+    builders,
+    "build_light_source_mesh",
+    light_function,
+)
+
+
+weight_function = r'''
+def build_weight_mesh(
+    parameters: TileParameters,
+) -> MeshData:
+    """Build OW12 as a cubic mass rotated 45 degrees on the tile."""
+
+    base = square_tile_base(parameters)
+
+    cube_size_mm = min(
+        parameters.shape_width_mm * 0.58,
+        parameters.tile_width_mm * 0.42,
+        parameters.tile_depth_mm * 0.42,
+    )
+
+    cube = rectangular_prism(
+        width_mm=cube_size_mm,
+        depth_mm=cube_size_mm,
+        height_mm=cube_size_mm,
+    )
+
+    cube = rotate_mesh_z(
+        cube,
+        angle_degrees=45.0,
+    )
+
+    cube = transform_mesh(
+        cube,
+        translate_z_mm=parameters.tile_height_mm,
+    )
+
+    return combine_meshes(
+        base,
+        cube,
+    )
+'''
+
+builders = replace_function(
+    builders,
+    "build_weight_mesh",
+    weight_function,
+)
+
+
+sensor_function = r'''
+def build_sensor_mesh(
+    parameters: TileParameters,
+) -> MeshData:
+    """Build OW14 as a small spherical detector seated in a recess."""
+
+    base = square_tile_base(parameters)
+
+    recess_radius_mm = parameters.shape_width_mm * 0.27
+
+    recess_depth_mm = max(
+        0.8,
+        parameters.shape_height_mm * 0.16,
+    )
+
+    outer_ring = transform_mesh(
+        cylinder_mesh(
+            radius_mm=recess_radius_mm,
+            length_mm=recess_depth_mm,
+            segments=max(
+                48,
+                parameters.circle_segments,
+            ),
+            axis="Z",
+        ),
+        translate_z_mm=parameters.tile_height_mm,
+    )
+
+    detector_radius_mm = parameters.shape_width_mm * 0.15
+
+    exposed_height_mm = detector_radius_mm * 0.58
+
+    detector = build_sensor_dome_mesh(
+        sphere_radius_mm=detector_radius_mm,
+        exposed_height_mm=exposed_height_mm,
+        base_z_mm=(
+            parameters.tile_height_mm
+            + recess_depth_mm * 0.42
+        ),
+        radial_segments=max(
+            48,
+            parameters.circle_segments,
+        ),
+    )
+
+    return combine_meshes(
+        base,
+        outer_ring,
+        detector,
+    )
+'''
+
+builders = replace_function(
+    builders,
+    "build_sensor_mesh",
+    sensor_function,
+)
+
+write(builders_path, builders)
+
+
+# =====================================================================
+# Canonical Blender materials
+# =====================================================================
+
+materials_path = Path(
+    "owde_addon/blender/materials.py"
+)
+
+write(
+    materials_path,
+    r'''from __future__ import annotations
+
+import bpy
+
+from ..core.models import ShapeType
+
+
+def _principled(
+    material: bpy.types.Material,
+):
+    if not material.use_nodes:
+        material.use_nodes = True
+
+    return material.node_tree.nodes.get(
+        "Principled BSDF"
+    )
+
+
+def _input(
+    node,
+    *names: str,
+):
+    for name in names:
+        value = node.inputs.get(name)
+
+        if value is not None:
+            return value
+
+    return None
+
+
+def get_or_create_tile_material() -> bpy.types.Material:
+    name = "OWDE Tile"
+
+    material = bpy.data.materials.get(name)
+
+    if material is None:
+        material = bpy.data.materials.new(name)
+        material.use_nodes = True
+
+        principled = _principled(material)
+
+        principled.inputs["Base Color"].default_value = (
+            0.72,
+            0.69,
+            0.64,
+            1.0,
+        )
+        principled.inputs["Roughness"].default_value = 0.62
+
+    return material
+
+
+def get_or_create_clear_lens_material() -> bpy.types.Material:
+    name = "OWDE Clear Lens"
+
+    material = bpy.data.materials.get(name)
+
+    if material is None:
+        material = bpy.data.materials.new(name)
+        material.use_nodes = True
+
+        principled = _principled(material)
+
+        principled.inputs["Base Color"].default_value = (
+            0.92,
+            0.97,
+            1.0,
+            1.0,
+        )
+        principled.inputs["Roughness"].default_value = 0.08
+
+        metallic = _input(
+            principled,
+            "Metallic",
+        )
+
+        if metallic is not None:
+            metallic.default_value = 0.0
+
+        transmission = _input(
+            principled,
+            "Transmission Weight",
+            "Transmission",
+        )
+
+        if transmission is not None:
+            transmission.default_value = 0.92
+
+        ior = _input(
+            principled,
+            "IOR",
+        )
+
+        if ior is not None:
+            ior.default_value = 1.45
+
+    return material
+
+
+def get_or_create_frosted_light_material() -> bpy.types.Material:
+    name = "OWDE Frosted Light"
+
+    material = bpy.data.materials.get(name)
+
+    if material is None:
+        material = bpy.data.materials.new(name)
+        material.use_nodes = True
+
+        principled = _principled(material)
+
+        principled.inputs["Base Color"].default_value = (
+            1.0,
+            0.82,
+            0.52,
+            1.0,
+        )
+        principled.inputs["Roughness"].default_value = 0.34
+
+        emission = _input(
+            principled,
+            "Emission Color",
+            "Emission",
+        )
+
+        if emission is not None:
+            emission.default_value = (
+                1.0,
+                0.38,
+                0.06,
+                1.0,
+            )
+
+        strength = _input(
+            principled,
+            "Emission Strength",
+        )
+
+        if strength is not None:
+            strength.default_value = 3.0
+
+        transmission = _input(
+            principled,
+            "Transmission Weight",
+            "Transmission",
+        )
+
+        if transmission is not None:
+            transmission.default_value = 0.18
+
+    return material
+
+
+def get_or_create_brushed_steel_material() -> bpy.types.Material:
+    name = "OWDE Brushed Steel"
+
+    material = bpy.data.materials.get(name)
+
+    if material is None:
+        material = bpy.data.materials.new(name)
+        material.use_nodes = True
+
+        principled = _principled(material)
+
+        principled.inputs["Base Color"].default_value = (
+            0.23,
+            0.25,
+            0.27,
+            1.0,
+        )
+        principled.inputs["Metallic"].default_value = 0.92
+        principled.inputs["Roughness"].default_value = 0.28
+
+        anisotropic = _input(
+            principled,
+            "Anisotropic IOR Level",
+            "Anisotropic",
+        )
+
+        if anisotropic is not None:
+            anisotropic.default_value = 0.38
+
+    return material
+
+
+def get_or_create_sensor_material() -> bpy.types.Material:
+    name = "OWDE Piano Black Sensor"
+
+    material = bpy.data.materials.get(name)
+
+    if material is None:
+        material = bpy.data.materials.new(name)
+        material.use_nodes = True
+
+        principled = _principled(material)
+
+        principled.inputs["Base Color"].default_value = (
+            0.004,
+            0.005,
+            0.007,
+            1.0,
+        )
+        principled.inputs["Metallic"].default_value = 0.08
+        principled.inputs["Roughness"].default_value = 0.06
+
+        coat = _input(
+            principled,
+            "Coat Weight",
+            "Clearcoat",
+        )
+
+        if coat is not None:
+            coat.default_value = 0.65
+
+    return material
+
+
+def get_or_create_mirror_material() -> bpy.types.Material:
+    name = "OWDE Mirror Chrome"
+
+    material = bpy.data.materials.get(name)
+
+    if material is None:
+        material = bpy.data.materials.new(name)
+        material.use_nodes = True
+
+        principled = _principled(material)
+
+        principled.inputs["Base Color"].default_value = (
+            0.82,
+            0.84,
+            0.87,
+            1.0,
+        )
+        principled.inputs["Metallic"].default_value = 1.0
+        principled.inputs["Roughness"].default_value = 0.035
+
+    return material
+
+
+def material_for_shape(
+    shape: ShapeType,
+) -> bpy.types.Material:
+    if shape is ShapeType.LENS:
+        return get_or_create_clear_lens_material()
+
+    if shape is ShapeType.LIGHT_SOURCE:
+        return get_or_create_frosted_light_material()
+
+    if shape is ShapeType.WEIGHT:
+        return get_or_create_brushed_steel_material()
+
+    if shape is ShapeType.SENSOR:
+        return get_or_create_sensor_material()
+
+    if shape is ShapeType.MIRROR:
+        return get_or_create_mirror_material()
+
+    return get_or_create_tile_material()
+
+
+def assign_shape_material(
+    object_: bpy.types.Object,
+    shape: ShapeType,
+) -> None:
+    material = material_for_shape(shape)
+
+    object_.data.materials.clear()
+    object_.data.materials.append(material)
+''',
+)
+
+
+# =====================================================================
+# Showcase renderer
+# =====================================================================
+
+showcase_path = Path(
+    "owde_addon/blender/showcase.py"
+)
+
+write(
+    showcase_path,
+    r'''from __future__ import annotations
+
+from pathlib import Path
+import math
+
+import bpy
+from bpy.props import (
+    BoolProperty,
+    IntProperty,
+    StringProperty,
+)
+
+from ..core.builders import build_tile_mesh
+from ..core.models import ShapeType, TileParameters
+from .materials import assign_shape_material
+
+
+MM_TO_METERS = 0.001
+
+
+SHOWCASE_SHAPES = (
+    ShapeType.CIRCLE,
+    ShapeType.TRIANGLE,
+    ShapeType.SQUARE,
+    ShapeType.HEXAGON,
+    ShapeType.SLOT,
+    ShapeType.HINGE,
+    ShapeType.FOLD,
+    ShapeType.APERTURE,
+    ShapeType.LENS,
+    ShapeType.MIRROR,
+    ShapeType.LIGHT_SOURCE,
+    ShapeType.WEIGHT,
+    ShapeType.THRESHOLD,
+    ShapeType.SENSOR,
+    ShapeType.HANDLE,
+)
+
+
+def mesh_object_from_data(
+    name: str,
+    mesh_data,
+) -> bpy.types.Object:
+    mesh = bpy.data.meshes.new(
+        f"{name}_Mesh"
+    )
+
+    vertices = [
+        (
+            vertex[0] * MM_TO_METERS,
+            vertex[1] * MM_TO_METERS,
+            vertex[2] * MM_TO_METERS,
+        )
+        for vertex in mesh_data.vertices
+    ]
+
+    mesh.from_pydata(
+        vertices,
+        [],
+        list(mesh_data.faces),
+    )
+    mesh.update(calc_edges=True)
+
+    object_ = bpy.data.objects.new(
+        name,
+        mesh,
+    )
+
+    bpy.context.scene.collection.objects.link(
+        object_
+    )
+
+    return object_
+
+
+def clear_showcase() -> None:
+    collection = bpy.data.collections.get(
+        "OWDE Showcase"
+    )
+
+    if collection is None:
+        return
+
+    for object_ in list(collection.objects):
+        bpy.data.objects.remove(
+            object_,
+            do_unlink=True,
+        )
+
+    bpy.data.collections.remove(
+        collection
+    )
+
+
+def move_to_collection(
+    object_: bpy.types.Object,
+    collection: bpy.types.Collection,
+) -> None:
+    for current in list(object_.users_collection):
+        current.objects.unlink(object_)
+
+    collection.objects.link(object_)
+
+
+def add_area_light(
+    *,
+    name: str,
+    location: tuple[float, float, float],
+    energy: float,
+    size: float,
+) -> bpy.types.Object:
+    data = bpy.data.lights.new(
+        name=name,
+        type="AREA",
+    )
+
+    data.energy = energy
+    data.shape = "DISK"
+    data.size = size
+
+    object_ = bpy.data.objects.new(
+        name,
+        data,
+    )
+
+    bpy.context.scene.collection.objects.link(
+        object_
+    )
+
+    object_.location = location
+
+    direction = (
+        math.atan2(location[1], location[0]),
+        0.0,
+        math.atan2(
+            math.sqrt(
+                location[0] ** 2
+                + location[1] ** 2
+            ),
+            location[2],
+        ),
+    )
+
+    object_.rotation_euler = (
+        direction[2],
+        0.0,
+        direction[0] + math.pi / 2.0,
+    )
+
+    return object_
+
+
+def create_showcase_camera(
+    gallery_width: float,
+    gallery_depth: float,
+) -> bpy.types.Object:
+    camera_data = bpy.data.cameras.new(
+        "OWDE Showcase Camera"
+    )
+
+    camera = bpy.data.objects.new(
+        "OWDE Showcase Camera",
+        camera_data,
+    )
+
+    bpy.context.scene.collection.objects.link(
+        camera
+    )
+
+    camera.location = (
+        gallery_width * 0.68,
+        -gallery_depth * 1.08,
+        gallery_depth * 1.12,
+    )
+
+    target = bpy.data.objects.new(
+        "OWDE Showcase Camera Target",
+        None,
+    )
+
+    bpy.context.scene.collection.objects.link(
+        target
+    )
+
+    constraint = camera.constraints.new(
+        type="TRACK_TO"
+    )
+    constraint.target = target
+    constraint.track_axis = "TRACK_NEGATIVE_Z"
+    constraint.up_axis = "UP_Y"
+
+    camera_data.type = "ORTHO"
+    camera_data.ortho_scale = max(
+        gallery_width,
+        gallery_depth,
+    ) * 1.18
+
+    return camera
+
+
+def configure_world() -> None:
+    world = bpy.context.scene.world
+
+    if world is None:
+        world = bpy.data.worlds.new(
+            "OWDE Showcase World"
+        )
+        bpy.context.scene.world = world
+
+    world.use_nodes = True
+
+    background = world.node_tree.nodes.get(
+        "Background"
+    )
+
+    if background is not None:
+        background.inputs["Color"].default_value = (
+            0.012,
+            0.014,
+            0.018,
+            1.0,
+        )
+        background.inputs["Strength"].default_value = 0.32
+
+
+def configure_render(
+    *,
+    resolution: int,
+    output_path: Path,
+) -> None:
+    scene = bpy.context.scene
+
+    scene.render.engine = "BLENDER_EEVEE_NEXT"
+
+    scene.render.resolution_x = resolution
+    scene.render.resolution_y = int(
+        resolution * 0.68
+    )
+    scene.render.resolution_percentage = 100
+
+    scene.render.image_settings.file_format = "PNG"
+    scene.render.image_settings.color_mode = "RGBA"
+
+    scene.render.film_transparent = False
+
+    scene.render.filepath = str(
+        output_path
+    )
+
+
+class OWDE_OT_create_showcase(
+    bpy.types.Operator
+):
+    bl_idname = "owde.create_showcase"
+    bl_label = "Create Operational Worlds Showcase"
+    bl_description = (
+        "Create all fifteen primitives, apply canonical materials, "
+        "build studio lighting, and optionally render a contact sheet"
+    )
+    bl_options = {
+        "REGISTER",
+        "UNDO",
+    }
+
+    render_image: BoolProperty(
+        name="Render Contact Sheet",
+        default=True,
+    )
+
+    image_resolution: IntProperty(
+        name="Image Width",
+        default=4096,
+        min=1024,
+        max=8192,
+    )
+
+    output_directory: StringProperty(
+        name="Output Directory",
+        subtype="DIR_PATH",
+        default="//exports/showcase/",
+    )
+
+    def execute(self, context):
+        clear_showcase()
+
+        collection = bpy.data.collections.new(
+            "OWDE Showcase"
+        )
+
+        context.scene.collection.children.link(
+            collection
+        )
+
+        tile_width_mm = 100.0
+        tile_depth_mm = 100.0
+        spacing_mm = 126.0
+
+        column_count = 5
+        row_count = 3
+
+        created_objects: list[
+            bpy.types.Object
+        ] = []
+
+        for index, shape in enumerate(
+            SHOWCASE_SHAPES
+        ):
+            parameters = TileParameters(
+                shape=shape,
+                tile_width_mm=tile_width_mm,
+                tile_depth_mm=tile_depth_mm,
+                tile_height_mm=8.0,
+                shape_width_mm=55.0,
+                shape_height_mm=5.0,
+                circle_segments=64,
+            )
+
+            mesh_data = build_tile_mesh(
+                parameters
+            )
+
+            object_ = mesh_object_from_data(
+                f"PRIM-{index + 1:04d}_{shape.value}",
+                mesh_data,
+            )
+
+            row = index // column_count
+            column = index % column_count
+
+            x_mm = (
+                column
+                - (column_count - 1) / 2.0
+            ) * spacing_mm
+
+            y_mm = (
+                (row_count - 1) / 2.0
+                - row
+            ) * spacing_mm
+
+            object_.location = (
+                x_mm * MM_TO_METERS,
+                y_mm * MM_TO_METERS,
+                0.0,
+            )
+
+            object_["owde_primitive_id"] = (
+                f"PRIM-{index + 1:04d}"
+            )
+            object_["owde_shape"] = shape.value
+            object_["owde_showcase"] = True
+
+            assign_shape_material(
+                object_,
+                shape,
+            )
+
+            if shape is ShapeType.WEIGHT:
+                bevel = object_.modifiers.new(
+                    name="OWDE Weight Edge Chamfer",
+                    type="BEVEL",
+                )
+                bevel.width = 1.4 * MM_TO_METERS
+                bevel.segments = 3
+                bevel.limit_method = "ANGLE"
+
+            for polygon in object_.data.polygons:
+                polygon.use_smooth = shape in {
+                    ShapeType.LENS,
+                    ShapeType.LIGHT_SOURCE,
+                    ShapeType.SENSOR,
+                    ShapeType.MIRROR,
+                }
+
+            move_to_collection(
+                object_,
+                collection,
+            )
+
+            created_objects.append(
+                object_
+            )
+
+        gallery_width = (
+            (
+                column_count - 1
+            )
+            * spacing_mm
+            + tile_width_mm
+        ) * MM_TO_METERS
+
+        gallery_depth = (
+            (
+                row_count - 1
+            )
+            * spacing_mm
+            + tile_depth_mm
+        ) * MM_TO_METERS
+
+        configure_world()
+
+        key = add_area_light(
+            name="OWDE Key Light",
+            location=(
+                -gallery_width * 0.54,
+                -gallery_depth * 0.46,
+                gallery_depth * 0.98,
+            ),
+            energy=1350.0,
+            size=2.8,
+        )
+
+        fill = add_area_light(
+            name="OWDE Fill Light",
+            location=(
+                gallery_width * 0.68,
+                -gallery_depth * 0.10,
+                gallery_depth * 0.62,
+            ),
+            energy=780.0,
+            size=3.2,
+        )
+
+        rim = add_area_light(
+            name="OWDE Rim Light",
+            location=(
+                0.0,
+                gallery_depth * 0.72,
+                gallery_depth * 0.88,
+            ),
+            energy=1080.0,
+            size=2.4,
+        )
+
+        for light in (
+            key,
+            fill,
+            rim,
+        ):
+            move_to_collection(
+                light,
+                collection,
+            )
+
+        camera = create_showcase_camera(
+            gallery_width,
+            gallery_depth,
+        )
+
+        target = bpy.data.objects.get(
+            "OWDE Showcase Camera Target"
+        )
+
+        move_to_collection(
+            camera,
+            collection,
+        )
+
+        if target is not None:
+            move_to_collection(
+                target,
+                collection,
+            )
+
+        context.scene.camera = camera
+
+        output_directory = Path(
+            bpy.path.abspath(
+                self.output_directory
+            )
+        )
+
+        output_directory.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
+        output_path = (
+            output_directory
+            / "OWDE_Primitive_Showcase.png"
+        )
+
+        configure_render(
+            resolution=self.image_resolution,
+            output_path=output_path,
+        )
+
+        if self.render_image:
+            bpy.ops.render.render(
+                write_still=True
+            )
+
+        self.report(
+            {"INFO"},
+            (
+                "Created OWDE showcase with 15 primitives"
+                + (
+                    f" and rendered {output_path}"
+                    if self.render_image
+                    else ""
+                )
+            ),
+        )
+
+        return {"FINISHED"}
+''',
+)
+
+
+# =====================================================================
+# Register showcase operator
+# =====================================================================
+
+blender_init_path = Path(
+    "owde_addon/blender/__init__.py"
+)
+blender_init = read(blender_init_path)
+
+import_line = (
+    "from .showcase import "
+    "OWDE_OT_create_showcase\n"
+)
+
+if import_line not in blender_init:
+    import_insertion = re.search(
+        r"^(?:from \.[^\n]+ import [^\n]+\n)+",
+        blender_init,
+        re.MULTILINE,
+    )
+
+    if import_insertion:
+        position = import_insertion.end()
+        blender_init = (
+            blender_init[:position]
+            + import_line
+            + blender_init[position:]
+        )
+    else:
+        blender_init = (
+            import_line
+            + blender_init
+        )
+
+if "OWDE_OT_create_showcase," not in blender_init:
+    class_tuple_pattern = re.compile(
+        r"(?P<header>\b(?:CLASSES|classes)\s*=\s*\(\s*\n)"
+        r"(?P<body>.*?)"
+        r"(?P<footer>^\))",
+        re.MULTILINE | re.DOTALL,
+    )
+
+    match = class_tuple_pattern.search(
+        blender_init
+    )
+
+    if match is None:
+        raise SystemExit(
+            "Could not locate the class registration tuple in "
+            "owde_addon/blender/__init__.py.\n\n"
+            f"No registration changes were written. Backup: {backup_root}"
+        )
+
+    body = match.group("body")
+
+    replacement = (
+        match.group("header")
+        + body
+        + "    OWDE_OT_create_showcase,\n"
+        + match.group("footer")
+    )
+
+    blender_init = (
+        blender_init[:match.start()]
+        + replacement
+        + blender_init[match.end():]
+    )
+
+write(
+    blender_init_path,
+    blender_init,
+)
+
+
+# =====================================================================
+# Add panel button
+# =====================================================================
+
+panel_path = Path(
+    "owde_addon/blender/panel.py"
+)
+panel = read(panel_path)
+
+if '"owde.create_showcase"' not in panel:
+    draw_pattern = re.compile(
+        r"(?P<indent>\s+)"
+        r"layout\.operator\(\s*"
+        r"[\"']owde\.create_primitive_gallery[\"']"
+        r".*?\n",
+        re.DOTALL,
+    )
+
+    match = draw_pattern.search(panel)
+
+    showcase_button = (
+        "\n"
+        "        showcase_box = layout.box()\n"
+        "        showcase_box.label(\n"
+        '            text="Documentation Showcase",\n'
+        "        )\n"
+        "        showcase_box.operator(\n"
+        '            "owde.create_showcase",\n'
+        '            text="Create Showcase",\n'
+        '            icon="RENDER_STILL",\n'
+        "        )\n"
+    )
+
+    if match:
+        panel = (
+            panel[:match.end()]
+            + showcase_button
+            + panel[match.end():]
+        )
+    else:
+        # Insert before the next Blender panel class or end of file.
+        class_marker = re.search(
+            r"\nclass OWDE_PT_",
+            panel,
+        )
+
+        if class_marker is None:
+            raise SystemExit(
+                "Could not safely add the showcase button to panel.py."
+            )
+
+        panel = (
+            panel[:class_marker.start()]
+            + showcase_button
+            + panel[class_marker.start():]
+        )
+
+write(panel_path, panel)
+
+
+# =====================================================================
+# Version bump
+# =====================================================================
+
+operators_path = Path(
+    "owde_addon/blender/operators.py"
+)
+operators = read(operators_path)
+
+operators = re.sub(
+    r'OWDE_VERSION\s*=\s*"[^"]+"',
+    'OWDE_VERSION = "0.5.0-alpha.1"',
+    operators,
+    count=1,
+)
+
+write(operators_path, operators)
+
+top_init_path = Path("owde_addon/__init__.py")
+
+if top_init_path.exists():
+    top_init = read(top_init_path)
+
+    top_init = re.sub(
+        r'("version"\s*:\s*)\([^)]+\)',
+        r'\g<1>(0, 5, 0)',
+        top_init,
+        count=1,
+    )
+
+    top_init = re.sub(
+        r'__version__\s*=\s*"[^"]+"',
+        '__version__ = "0.5.0-alpha.1"',
+        top_init,
+        count=1,
+    )
+
+    write(top_init_path, top_init)
+
+
+# =====================================================================
+# Tests
+# =====================================================================
+
+test_file = Path(
+    "tests/test_canonical_primitives.py"
+)
+
+write(
+    test_file,
+    r'''import math
+
+import pytest
+
+from owde_addon.core.builders import build_tile_mesh
+from owde_addon.core.models import ShapeType, TileParameters
+
+
+def parameters(shape: ShapeType) -> TileParameters:
+    return TileParameters(
+        shape=shape,
+        tile_width_mm=100.0,
+        tile_depth_mm=100.0,
+        tile_height_mm=8.0,
+        shape_width_mm=55.0,
+        shape_height_mm=5.0,
+        circle_segments=64,
+    )
+
+
+def feature_vertices(
+    shape: ShapeType,
+):
+    values = parameters(shape)
+    mesh = build_tile_mesh(values)
+
+    return (
+        values,
+        [
+            vertex
+            for vertex in mesh.vertices
+            if vertex[2] >= values.tile_height_mm
+        ],
+    )
+
+
+def test_lens_is_circular_and_centered() -> None:
+    values, vertices = feature_vertices(
+        ShapeType.LENS
+    )
+
+    maximum_radius = max(
+        math.hypot(
+            vertex[0],
+            vertex[1],
+        )
+        for vertex in vertices
+    )
+
+    assert maximum_radius == pytest.approx(
+        values.shape_width_mm * 0.39,
+        abs=0.05,
+    )
+
+
+def test_lens_has_single_centered_apex() -> None:
+    values = parameters(ShapeType.LENS)
+    mesh = build_tile_mesh(values)
+
+    maximum_z = max(
+        vertex[2]
+        for vertex in mesh.vertices
+    )
+
+    apex_vertices = [
+        vertex
+        for vertex in mesh.vertices
+        if math.isclose(
+            vertex[2],
+            maximum_z,
+            abs_tol=1e-6,
+        )
+    ]
+
+    assert any(
+        math.isclose(
+            vertex[0],
+            0.0,
+            abs_tol=1e-6,
+        )
+        and math.isclose(
+            vertex[1],
+            0.0,
+            abs_tol=1e-6,
+        )
+        for vertex in apex_vertices
+    )
+
+
+def test_weight_is_rotated_forty_five_degrees() -> None:
+    values = parameters(ShapeType.WEIGHT)
+    mesh = build_tile_mesh(values)
+
+    cube_vertices = [
+        vertex
+        for vertex in mesh.vertices
+        if vertex[2] > values.tile_height_mm
+    ]
+
+    positive_x_axis_vertices = [
+        vertex
+        for vertex in cube_vertices
+        if vertex[0] > 0
+        and math.isclose(
+            vertex[1],
+            0.0,
+            abs_tol=1e-6,
+        )
+    ]
+
+    assert positive_x_axis_vertices
+
+
+def test_sensor_is_smaller_than_lens() -> None:
+    _, lens_vertices = feature_vertices(
+        ShapeType.LENS
+    )
+
+    _, sensor_vertices = feature_vertices(
+        ShapeType.SENSOR
+    )
+
+    lens_radius = max(
+        math.hypot(
+            vertex[0],
+            vertex[1],
+        )
+        for vertex in lens_vertices
+    )
+
+    sensor_radius = max(
+        math.hypot(
+            vertex[0],
+            vertex[1],
+        )
+        for vertex in sensor_vertices
+    )
+
+    assert sensor_radius < lens_radius
+
+
+def test_light_source_is_lower_than_full_sphere() -> None:
+    values = parameters(
+        ShapeType.LIGHT_SOURCE
+    )
+    mesh = build_tile_mesh(values)
+
+    maximum_z = max(
+        vertex[2]
+        for vertex in mesh.vertices
+    )
+
+    total_feature_height = (
+        maximum_z
+        - values.tile_height_mm
+    )
+
+    full_sphere_diameter = (
+        values.shape_width_mm * 0.62
+    )
+
+    assert total_feature_height < full_sphere_diameter
+''',
+)
+
+
+# =====================================================================
+# Release notes
+# =====================================================================
+
+release_notes_path = Path(
+    "docs/releases/OWDE_0.5.0-alpha.1.md"
+)
+
+write(
+    release_notes_path,
+    textwrap.dedent(
+        """\
+        # OWDE 0.5.0-alpha.1
+
+        ## Canonical Primitive Geometry and Showcase Renderer
+
+        This release establishes canonical reference geometry for four
+        Operational Worlds primitives and introduces a publication-oriented
+        Blender showcase workflow.
+
+        ## Geometry changes
+
+        ### OW09 Lens
+
+        - Replaced the directional teardrop with a circular,
+          rotationally symmetric surface-tension droplet.
+        - Removed the pedestal.
+        - Added a smooth perimeter meniscus and centered apex.
+        - Prepared the form for clear or translucent fabrication.
+
+        ### OW11 Light Source
+
+        - Replaced stacked cylindrical geometry with a revolved bulb profile.
+        - Reduced overall bulb height.
+        - Added a short neck and rounded frosted crown.
+
+        ### OW12 Weight
+
+        - Replaced the cylindrical weight with a cubic mass.
+        - Rotated the cube 45 degrees around the vertical axis.
+        - Added a Blender showcase chamfer and brushed-metal material.
+
+        ### OW14 Sensor
+
+        - Reduced the detector scale.
+        - Replaced the flat detector with a spherical dome.
+        - Seated the dome within a shallow circular mounting recess.
+
+        ## Canonical materials
+
+        - OWDE Clear Lens
+        - OWDE Frosted Light
+        - OWDE Brushed Steel
+        - OWDE Piano Black Sensor
+        - OWDE Mirror Chrome
+        - OWDE Tile
+
+        ## Showcase Renderer
+
+        The new `Create Showcase` operator:
+
+        - creates all fifteen primitives;
+        - arranges them in a five-column by three-row grid;
+        - applies canonical materials;
+        - adds key, fill, and rim studio lights;
+        - creates an orthographic isometric camera;
+        - optionally renders a high-resolution contact sheet;
+        - writes the image to `exports/showcase/`.
+
+        ## Preserved systems
+
+        - Create Primitive
+        - Create Primitive Gallery
+        - Primitive Inspector
+        - Primitive metadata
+        - Flat-top hexagon orientation
+        - Manufacturing package exporter
+
+        ## Release identifier
+
+        `OWDE 0.5.0-alpha.1`
+        """
+    ),
+)
+
+
+print()
+print("OWDE 0.5.0-alpha.1 patch applied.")
+print()
+print("Added:")
+print("  - Canonical OW09 Lens geometry")
+print("  - Canonical OW11 Light Source geometry")
+print("  - Canonical OW12 Weight geometry")
+print("  - Canonical OW14 Sensor geometry")
+print("  - Canonical Blender materials")
+print("  - Create Showcase operator")
+print("  - Showcase panel button")
+print("  - Canonical primitive tests")
+print("  - Release notes")
+print()
+print("Preserved:")
+print("  - Create Primitive")
+print("  - Create Primitive Gallery")
+print("  - Primitive Inspector")
+print("  - All 15 primitive definitions")
+print("  - Flat-top hexagon orientation")
+print("  - Manufacturing exporter")
+PY
+
+python3 -m pytest
+python3 scripts/build_addon.py
