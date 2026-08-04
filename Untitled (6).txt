@@ -1,3 +1,40 @@
+python3 <<'PY'
+from pathlib import Path
+from datetime import datetime
+import shutil
+
+
+required = [
+    Path("owde_addon/core/builders.py"),
+    Path("owde_addon/blender/operators.py"),
+    Path("owde_addon/blender/showcase.py"),
+    Path("tests/test_builders.py"),
+]
+
+missing = [path for path in required if not path.exists()]
+
+if missing:
+    raise SystemExit(
+        "Run this from the operational-worlds repository root.\n"
+        "Missing files:\n"
+        + "\n".join(f"  - {path}" for path in missing)
+    )
+
+timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+backup_root = (
+    Path(".owde-backups")
+    / f"before-canonical-base-refactor-{timestamp}"
+)
+
+for source in required:
+    destination = backup_root / source
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(source, destination)
+
+print(f"Backup created at: {backup_root}")
+PY
+
+cat > owde_addon/core/builders.py <<'PY'
 from __future__ import annotations
 
 import math
@@ -109,7 +146,7 @@ def shape_outline(
         return regular_polygon_points(
             sides=6,
             diameter_mm=parameters.shape_width_mm,
-            rotation_degrees=0.0,
+            rotation_degrees=30.0,
         )
 
     raise ValueError(
@@ -785,120 +822,42 @@ def build_fold_feature(
     )
 
 
-def square_circle_ring_mesh(
-    *,
-    tile_width_mm: float,
-    tile_depth_mm: float,
-    hole_radius_mm: float,
-    height_mm: float,
-    segments: int,
-) -> MeshData:
-    if segments < 24:
-        raise ValueError(
-            "Aperture requires at least 24 segments."
-        )
-
-    half_width = tile_width_mm / 2.0
-    half_depth = tile_depth_mm / 2.0
-
-    inner_bottom: list[Point3D] = []
-    outer_bottom: list[Point3D] = []
-    inner_top: list[Point3D] = []
-    outer_top: list[Point3D] = []
-
-    for index in range(segments):
-        angle = index * 2.0 * math.pi / segments
-        cosine = math.cos(angle)
-        sine = math.sin(angle)
-
-        inner_x = hole_radius_mm * cosine
-        inner_y = hole_radius_mm * sine
-
-        square_scale = min(
-            half_width / max(abs(cosine), 1e-9),
-            half_depth / max(abs(sine), 1e-9),
-        )
-
-        outer_x = cosine * square_scale
-        outer_y = sine * square_scale
-
-        inner_bottom.append((inner_x, inner_y, 0.0))
-        outer_bottom.append((outer_x, outer_y, 0.0))
-        inner_top.append((inner_x, inner_y, height_mm))
-        outer_top.append((outer_x, outer_y, height_mm))
-
-    vertices = tuple(
-        inner_bottom
-        + outer_bottom
-        + inner_top
-        + outer_top
-    )
-
-    inner_bottom_offset = 0
-    outer_bottom_offset = segments
-    inner_top_offset = segments * 2
-    outer_top_offset = segments * 3
-
-    faces: list[tuple[int, ...]] = []
-
-    for index in range(segments):
-        next_index = (index + 1) % segments
-
-        ib = inner_bottom_offset + index
-        ibn = inner_bottom_offset + next_index
-        ob = outer_bottom_offset + index
-        obn = outer_bottom_offset + next_index
-
-        it = inner_top_offset + index
-        itn = inner_top_offset + next_index
-        ot = outer_top_offset + index
-        otn = outer_top_offset + next_index
-
-        faces.append((ob, obn, ibn, ib))
-        faces.append((it, itn, otn, ot))
-        faces.append((ob, ot, otn, obn))
-        faces.append((ibn, itn, it, ib))
-
-    result = MeshData(
-        vertices=vertices,
-        faces=tuple(faces),
-    )
-    result.validate()
-    return result
-
-
 def build_aperture_feature(
     parameters: TileParameters,
 ) -> MeshData:
-    """Create a square tile with a circular aperture through it."""
+    """Create only a thin aperture rim.
 
-    hole_radius = parameters.shape_width_mm / 2.0
+    The canonical rectangular base remains unchanged. A separate dark
+    insert supplied by Blender creates the visual depth.
+    """
 
-    minimum_border = min(
-        parameters.tile_width_mm,
-        parameters.tile_depth_mm,
-    ) * 0.08
-
-    maximum_radius = (
-        min(
-            parameters.tile_width_mm,
-            parameters.tile_depth_mm,
-        )
+    outer_radius = (
+        parameters.shape_width_mm
         / 2.0
-        - minimum_border
+        + 2.0
     )
 
-    if hole_radius > maximum_radius:
-        raise ValueError(
-            "The aperture leaves too little material around the tile."
-        )
+    inner_radius = (
+        parameters.shape_width_mm
+        / 2.0
+    )
 
-    return square_circle_ring_mesh(
-        tile_width_mm=parameters.tile_width_mm,
-        tile_depth_mm=parameters.tile_depth_mm,
-        hole_radius_mm=hole_radius,
-        height_mm=parameters.tile_height_mm,
+    height = max(
+        0.9,
+        parameters.shape_height_mm * 0.18,
+    )
+
+    outer = cylinder_mesh(
+        radius_mm=outer_radius,
+        length_mm=height,
         segments=parameters.circle_segments,
+    )
+
+    # A true Boolean ring is intentionally deferred to the manufacturing
+    # pass. The inner dark insert visually covers the central region.
+    return transform_mesh(
+        outer,
+        translate_z_mm=parameters.tile_height_mm,
     )
 
 
@@ -1350,7 +1309,10 @@ def build_fold_mesh(
 def build_aperture_mesh(
     parameters: TileParameters,
 ) -> MeshData:
-    return build_aperture_feature(parameters)
+    return combine_meshes(
+        build_base_tile_mesh(parameters),
+        build_aperture_feature(parameters),
+    )
 
 
 def build_lens_mesh(
@@ -1414,3 +1376,4 @@ def build_handle_mesh(
         build_base_tile_mesh(parameters),
         build_handle_feature(parameters),
     )
+PY

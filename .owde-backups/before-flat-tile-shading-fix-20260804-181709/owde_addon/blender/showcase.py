@@ -573,50 +573,6 @@ def create_showcase_details(
     return details
 
 
-
-def apply_canonical_shading(
-    object_: bpy.types.Object,
-    shape: ShapeType,
-    tile_height_mm: float,
-) -> None:
-    """Keep the rectangular substrate flat while smoothing curved features.
-
-    The base tile occupies Z=0 through tile_height_mm. No base polygon
-    receives smooth shading. This preserves crisp rectangular edges.
-
-    Only polygons belonging to selected curved operational features are
-    smoothed.
-    """
-
-    curved_feature_shapes = {
-        ShapeType.CIRCLE,
-        ShapeType.HINGE,
-        ShapeType.APERTURE,
-        ShapeType.LENS,
-        ShapeType.LIGHT_SOURCE,
-        ShapeType.SENSOR,
-        ShapeType.HANDLE,
-    }
-
-    tile_height_m = tile_height_mm * MM_TO_METERS
-    epsilon = 0.000001
-
-    for polygon in object_.data.polygons:
-        vertex_heights = [
-            object_.data.vertices[index].co.z
-            for index in polygon.vertices
-        ]
-
-        belongs_to_feature = any(
-            height > tile_height_m + epsilon
-            for height in vertex_heights
-        )
-
-        polygon.use_smooth = (
-            belongs_to_feature
-            and shape in curved_feature_shapes
-        )
-
 def set_objects_render_visibility(
     objects: list[bpy.types.Object],
     visible: bool,
@@ -864,15 +820,26 @@ class OWDE_OT_create_showcase(
                     name="OWDE Weight Edge Chamfer",
                     type="BEVEL",
                 )
+
                 bevel.width = 1.2 * MM_TO_METERS
                 bevel.segments = 3
                 bevel.limit_method = "ANGLE"
 
-            apply_canonical_shading(
-                object_,
-                shape,
-                parameters.tile_height_mm,
-            )
+            smooth_shapes = {
+                ShapeType.CIRCLE,
+                ShapeType.HINGE,
+                ShapeType.APERTURE,
+                ShapeType.LENS,
+                ShapeType.MIRROR,
+                ShapeType.LIGHT_SOURCE,
+                ShapeType.WEIGHT,
+                ShapeType.SENSOR,
+                ShapeType.HANDLE,
+            }
+
+            if shape in smooth_shapes:
+                for polygon in object_.data.polygons:
+                    polygon.use_smooth = True
 
             move_to_collection(
                 object_,

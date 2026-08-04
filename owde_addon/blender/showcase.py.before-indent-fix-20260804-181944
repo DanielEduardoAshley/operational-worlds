@@ -864,15 +864,17 @@ class OWDE_OT_create_showcase(
                     name="OWDE Weight Edge Chamfer",
                     type="BEVEL",
                 )
+
                 bevel.width = 1.2 * MM_TO_METERS
                 bevel.segments = 3
                 bevel.limit_method = "ANGLE"
 
-            apply_canonical_shading(
+                        apply_canonical_shading(
                 object_,
                 shape,
                 parameters.tile_height_mm,
             )
+
 
             move_to_collection(
                 object_,
