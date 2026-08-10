@@ -1,0 +1,612 @@
+{
+  "package_name": "OWDE Canonical Quote Package",
+  "package_version": "0.1.0",
+  "generated_at_utc": "2026-08-10T19:34:30.499332+00:00",
+  "units": "millimeters",
+  "stl_unit_warning": "Import all STL files as millimeters.",
+  "requested_initial_quantity": 1,
+  "primitive_count": 5,
+  "size_count": 2,
+  "records": [
+    {
+      "size": {
+        "key": "6in",
+        "label": "6 \u00d7 6 inch",
+        "width_mm": 152.4,
+        "depth_mm": 152.4,
+        "scale_factor": 1.524
+      },
+      "primitive": {
+        "primitive_id": "PRIM-0009",
+        "shape": "LENS",
+        "name": "Lens",
+        "filename": "PRIM-0009_Lens",
+        "base_material": "Matte off-white PLA, PETG, resin, or nylon",
+        "feature_material": "Clear or translucent resin/acrylic",
+        "finish": "Matte base; smooth polished or gloss lens",
+        "functional_status": "Visual lens prototype; no optical focal specification",
+        "fabrication_notes": "Quote as one opaque form-test print and as a two-part assembly with a transparent feature."
+      },
+      "parameters": {
+        "tile_width_mm": 152.4,
+        "tile_depth_mm": 152.4,
+        "tile_height_mm": 12.192,
+        "feature_width_mm": 83.82000000000001,
+        "feature_height_mm": 7.62,
+        "circle_segments": 96
+      },
+      "files": {
+        "assembled_stl": "6in/assembled/PRIM-0009_Lens_6in_assembled.stl",
+        "base_stl": "6in/components/base/PRIM-0009_Lens_6in_base.stl",
+        "feature_stl": "6in/components/feature/PRIM-0009_Lens_6in_feature.stl",
+        "isometric_render": "6in/renders/PRIM-0009_Lens_6in_isometric.png",
+        "top_render": "6in/renders/PRIM-0009_Lens_6in_top.png"
+      },
+      "bounds": {
+        "base": {
+          "minimum_x_mm": -76.2,
+          "maximum_x_mm": 76.2,
+          "minimum_y_mm": -76.2,
+          "maximum_y_mm": 76.2,
+          "minimum_z_mm": 0.0,
+          "maximum_z_mm": 12.192,
+          "overall_width_mm": 152.4,
+          "overall_depth_mm": 152.4,
+          "overall_height_mm": 12.192
+        },
+        "feature": {
+          "minimum_x_mm": -31.851600000000005,
+          "maximum_x_mm": 31.851600000000005,
+          "minimum_y_mm": -31.851600000000005,
+          "maximum_y_mm": 31.851600000000005,
+          "minimum_z_mm": 12.192,
+          "maximum_z_mm": 23.241,
+          "overall_width_mm": 63.70320000000001,
+          "overall_depth_mm": 63.70320000000001,
+          "overall_height_mm": 11.049
+        },
+        "overall_height_mm": 23.241
+      }
+    },
+    {
+      "size": {
+        "key": "6in",
+        "label": "6 \u00d7 6 inch",
+        "width_mm": 152.4,
+        "depth_mm": 152.4,
+        "scale_factor": 1.524
+      },
+      "primitive": {
+        "primitive_id": "PRIM-0010",
+        "shape": "MIRROR",
+        "name": "Mirror",
+        "filename": "PRIM-0010_Mirror",
+        "base_material": "Matte off-white PLA, PETG, resin, or nylon",
+        "feature_material": "Mirrored acrylic, reflective film, or polished metal insert",
+        "finish": "Matte base and bezel; highly reflective central surface",
+        "functional_status": "Reflective visual surface",
+        "fabrication_notes": "Feature STL is an insert template. Quote mirrored acrylic and reflective-film options separately."
+      },
+      "parameters": {
+        "tile_width_mm": 152.4,
+        "tile_depth_mm": 152.4,
+        "tile_height_mm": 12.192,
+        "feature_width_mm": 83.82000000000001,
+        "feature_height_mm": 7.62,
+        "circle_segments": 96
+      },
+      "files": {
+        "assembled_stl": "6in/assembled/PRIM-0010_Mirror_6in_assembled.stl",
+        "base_stl": "6in/components/base/PRIM-0010_Mirror_6in_base.stl",
+        "feature_stl": "6in/components/feature/PRIM-0010_Mirror_6in_feature.stl",
+        "isometric_render": "6in/renders/PRIM-0010_Mirror_6in_isometric.png",
+        "top_render": "6in/renders/PRIM-0010_Mirror_6in_top.png"
+      },
+      "bounds": {
+        "base": {
+          "minimum_x_mm": -76.2,
+          "maximum_x_mm": 76.2,
+          "minimum_y_mm": -76.2,
+          "maximum_y_mm": 76.2,
+          "minimum_z_mm": 0.0,
+          "maximum_z_mm": 12.192,
+          "overall_width_mm": 152.4,
+          "overall_depth_mm": 152.4,
+          "overall_height_mm": 12.192
+        },
+        "feature": {
+          "minimum_x_mm": -38.146482,
+          "maximum_x_mm": 38.146482,
+          "minimum_y_mm": -38.146482,
+          "maximum_y_mm": 38.146482,
+          "minimum_z_mm": 12.192,
+          "maximum_z_mm": 15.0876,
+          "overall_width_mm": 76.292964,
+          "overall_depth_mm": 76.292964,
+          "overall_height_mm": 2.8956
+        },
+        "overall_height_mm": 15.0876
+      }
+    },
+    {
+      "size": {
+        "key": "6in",
+        "label": "6 \u00d7 6 inch",
+        "width_mm": 152.4,
+        "depth_mm": 152.4,
+        "scale_factor": 1.524
+      },
+      "primitive": {
+        "primitive_id": "PRIM-0011",
+        "shape": "LIGHT_SOURCE",
+        "name": "Light Source",
+        "filename": "PRIM-0011_Light_Source",
+        "base_material": "Matte off-white PLA, PETG, resin, or nylon",
+        "feature_material": "Frosted translucent resin or acrylic",
+        "finish": "Matte base; frosted translucent bulb",
+        "functional_status": "Diffuser prototype; electronics are not included",
+        "fabrication_notes": "Quote the bulb as a separate translucent component. Optional warm LED integration may be quoted separately."
+      },
+      "parameters": {
+        "tile_width_mm": 152.4,
+        "tile_depth_mm": 152.4,
+        "tile_height_mm": 12.192,
+        "feature_width_mm": 83.82000000000001,
+        "feature_height_mm": 7.62,
+        "circle_segments": 96
+      },
+      "files": {
+        "assembled_stl": "6in/assembled/PRIM-0011_Light_Source_6in_assembled.stl",
+        "base_stl": "6in/components/base/PRIM-0011_Light_Source_6in_base.stl",
+        "feature_stl": "6in/components/feature/PRIM-0011_Light_Source_6in_feature.stl",
+        "isometric_render": "6in/renders/PRIM-0011_Light_Source_6in_isometric.png",
+        "top_render": "6in/renders/PRIM-0011_Light_Source_6in_top.png"
+      },
+      "bounds": {
+        "base": {
+          "minimum_x_mm": -76.2,
+          "maximum_x_mm": 76.2,
+          "minimum_y_mm": -76.2,
+          "maximum_y_mm": 76.2,
+          "minimum_z_mm": 0.0,
+          "maximum_z_mm": 12.192,
+          "overall_width_mm": 152.4,
+          "overall_depth_mm": 152.4,
+          "overall_height_mm": 12.192
+        },
+        "feature": {
+          "minimum_x_mm": -23.8887,
+          "maximum_x_mm": 23.8887,
+          "minimum_y_mm": -23.8887,
+          "maximum_y_mm": 23.8887,
+          "minimum_z_mm": 12.192,
+          "maximum_z_mm": 27.2034,
+          "overall_width_mm": 47.7774,
+          "overall_depth_mm": 47.7774,
+          "overall_height_mm": 15.011399999999998
+        },
+        "overall_height_mm": 27.2034
+      }
+    },
+    {
+      "size": {
+        "key": "6in",
+        "label": "6 \u00d7 6 inch",
+        "width_mm": 152.4,
+        "depth_mm": 152.4,
+        "scale_factor": 1.524
+      },
+      "primitive": {
+        "primitive_id": "PRIM-0012",
+        "shape": "WEIGHT",
+        "name": "Weight",
+        "filename": "PRIM-0012_Weight",
+        "base_material": "Matte off-white PLA, PETG, resin, or nylon",
+        "feature_material": "Metallic-finish polymer, metal-filled polymer, or fabricated metal",
+        "finish": "Matte base; brushed-metal cube",
+        "functional_status": "Symbolic weight unless physical ballast is separately specified",
+        "fabrication_notes": "Quote metallic polymer and actual metal alternatives. The cube is rotated 45 degrees and has chamfered corners."
+      },
+      "parameters": {
+        "tile_width_mm": 152.4,
+        "tile_depth_mm": 152.4,
+        "tile_height_mm": 12.192,
+        "feature_width_mm": 83.82000000000001,
+        "feature_height_mm": 7.62,
+        "circle_segments": 96
+      },
+      "files": {
+        "assembled_stl": "6in/assembled/PRIM-0012_Weight_6in_assembled.stl",
+        "base_stl": "6in/components/base/PRIM-0012_Weight_6in_base.stl",
+        "feature_stl": "6in/components/feature/PRIM-0012_Weight_6in_feature.stl",
+        "isometric_render": "6in/renders/PRIM-0012_Weight_6in_isometric.png",
+        "top_render": "6in/renders/PRIM-0012_Weight_6in_top.png"
+      },
+      "bounds": {
+        "base": {
+          "minimum_x_mm": -76.2,
+          "maximum_x_mm": 76.2,
+          "minimum_y_mm": -76.2,
+          "maximum_y_mm": 76.2,
+          "minimum_z_mm": 0.0,
+          "maximum_z_mm": 12.192,
+          "overall_width_mm": 152.4,
+          "overall_depth_mm": 152.4,
+          "overall_height_mm": 12.192
+        },
+        "feature": {
+          "minimum_x_mm": -33.961532598659325,
+          "maximum_x_mm": 33.961532598659325,
+          "minimum_y_mm": -33.961532598659325,
+          "maximum_y_mm": 33.961532598659325,
+          "minimum_z_mm": 12.192,
+          "maximum_z_mm": 62.484,
+          "overall_width_mm": 67.92306519731865,
+          "overall_depth_mm": 67.92306519731865,
+          "overall_height_mm": 50.292
+        },
+        "overall_height_mm": 62.484
+      }
+    },
+    {
+      "size": {
+        "key": "6in",
+        "label": "6 \u00d7 6 inch",
+        "width_mm": 152.4,
+        "depth_mm": 152.4,
+        "scale_factor": 1.524
+      },
+      "primitive": {
+        "primitive_id": "PRIM-0014",
+        "shape": "SENSOR",
+        "name": "Sensor",
+        "filename": "PRIM-0014_Sensor",
+        "base_material": "Matte off-white PLA, PETG, resin, or nylon",
+        "feature_material": "Gloss black resin, acrylic, PLA, or PETG",
+        "finish": "Matte base and recess; polished piano-black dome",
+        "functional_status": "Symbolic sensor housing; electronics are not included",
+        "fabrication_notes": "Quote the detector dome as a separately finished component. Optional electronic integration may be quoted separately."
+      },
+      "parameters": {
+        "tile_width_mm": 152.4,
+        "tile_depth_mm": 152.4,
+        "tile_height_mm": 12.192,
+        "feature_width_mm": 83.82000000000001,
+        "feature_height_mm": 7.62,
+        "circle_segments": 96
+      },
+      "files": {
+        "assembled_stl": "6in/assembled/PRIM-0014_Sensor_6in_assembled.stl",
+        "base_stl": "6in/components/base/PRIM-0014_Sensor_6in_base.stl",
+        "feature_stl": "6in/components/feature/PRIM-0014_Sensor_6in_feature.stl",
+        "isometric_render": "6in/renders/PRIM-0014_Sensor_6in_isometric.png",
+        "top_render": "6in/renders/PRIM-0014_Sensor_6in_top.png"
+      },
+      "bounds": {
+        "base": {
+          "minimum_x_mm": -76.2,
+          "maximum_x_mm": 76.2,
+          "minimum_y_mm": -76.2,
+          "maximum_y_mm": 76.2,
+          "minimum_z_mm": 0.0,
+          "maximum_z_mm": 12.192,
+          "overall_width_mm": 152.4,
+          "overall_depth_mm": 152.4,
+          "overall_height_mm": 12.192
+        },
+        "feature": {
+          "minimum_x_mm": -19.6977,
+          "maximum_x_mm": 19.6977,
+          "minimum_y_mm": -19.6977,
+          "maximum_y_mm": 19.6977,
+          "minimum_z_mm": 12.192,
+          "maximum_z_mm": 20.579334000000003,
+          "overall_width_mm": 39.3954,
+          "overall_depth_mm": 39.3954,
+          "overall_height_mm": 8.387334000000003
+        },
+        "overall_height_mm": 20.579334000000003
+      }
+    },
+    {
+      "size": {
+        "key": "12in",
+        "label": "12 \u00d7 12 inch",
+        "width_mm": 304.8,
+        "depth_mm": 304.8,
+        "scale_factor": 3.048
+      },
+      "primitive": {
+        "primitive_id": "PRIM-0009",
+        "shape": "LENS",
+        "name": "Lens",
+        "filename": "PRIM-0009_Lens",
+        "base_material": "Matte off-white PLA, PETG, resin, or nylon",
+        "feature_material": "Clear or translucent resin/acrylic",
+        "finish": "Matte base; smooth polished or gloss lens",
+        "functional_status": "Visual lens prototype; no optical focal specification",
+        "fabrication_notes": "Quote as one opaque form-test print and as a two-part assembly with a transparent feature."
+      },
+      "parameters": {
+        "tile_width_mm": 304.8,
+        "tile_depth_mm": 304.8,
+        "tile_height_mm": 24.384,
+        "feature_width_mm": 167.64000000000001,
+        "feature_height_mm": 15.24,
+        "circle_segments": 96
+      },
+      "files": {
+        "assembled_stl": "12in/assembled/PRIM-0009_Lens_12in_assembled.stl",
+        "base_stl": "12in/components/base/PRIM-0009_Lens_12in_base.stl",
+        "feature_stl": "12in/components/feature/PRIM-0009_Lens_12in_feature.stl",
+        "isometric_render": "12in/renders/PRIM-0009_Lens_12in_isometric.png",
+        "top_render": "12in/renders/PRIM-0009_Lens_12in_top.png"
+      },
+      "bounds": {
+        "base": {
+          "minimum_x_mm": -152.4,
+          "maximum_x_mm": 152.4,
+          "minimum_y_mm": -152.4,
+          "maximum_y_mm": 152.4,
+          "minimum_z_mm": 0.0,
+          "maximum_z_mm": 24.384,
+          "overall_width_mm": 304.8,
+          "overall_depth_mm": 304.8,
+          "overall_height_mm": 24.384
+        },
+        "feature": {
+          "minimum_x_mm": -63.70320000000001,
+          "maximum_x_mm": 63.70320000000001,
+          "minimum_y_mm": -63.70320000000001,
+          "maximum_y_mm": 63.70320000000001,
+          "minimum_z_mm": 24.384,
+          "maximum_z_mm": 46.482,
+          "overall_width_mm": 127.40640000000002,
+          "overall_depth_mm": 127.40640000000002,
+          "overall_height_mm": 22.098
+        },
+        "overall_height_mm": 46.482
+      }
+    },
+    {
+      "size": {
+        "key": "12in",
+        "label": "12 \u00d7 12 inch",
+        "width_mm": 304.8,
+        "depth_mm": 304.8,
+        "scale_factor": 3.048
+      },
+      "primitive": {
+        "primitive_id": "PRIM-0010",
+        "shape": "MIRROR",
+        "name": "Mirror",
+        "filename": "PRIM-0010_Mirror",
+        "base_material": "Matte off-white PLA, PETG, resin, or nylon",
+        "feature_material": "Mirrored acrylic, reflective film, or polished metal insert",
+        "finish": "Matte base and bezel; highly reflective central surface",
+        "functional_status": "Reflective visual surface",
+        "fabrication_notes": "Feature STL is an insert template. Quote mirrored acrylic and reflective-film options separately."
+      },
+      "parameters": {
+        "tile_width_mm": 304.8,
+        "tile_depth_mm": 304.8,
+        "tile_height_mm": 24.384,
+        "feature_width_mm": 167.64000000000001,
+        "feature_height_mm": 15.24,
+        "circle_segments": 96
+      },
+      "files": {
+        "assembled_stl": "12in/assembled/PRIM-0010_Mirror_12in_assembled.stl",
+        "base_stl": "12in/components/base/PRIM-0010_Mirror_12in_base.stl",
+        "feature_stl": "12in/components/feature/PRIM-0010_Mirror_12in_feature.stl",
+        "isometric_render": "12in/renders/PRIM-0010_Mirror_12in_isometric.png",
+        "top_render": "12in/renders/PRIM-0010_Mirror_12in_top.png"
+      },
+      "bounds": {
+        "base": {
+          "minimum_x_mm": -152.4,
+          "maximum_x_mm": 152.4,
+          "minimum_y_mm": -152.4,
+          "maximum_y_mm": 152.4,
+          "minimum_z_mm": 0.0,
+          "maximum_z_mm": 24.384,
+          "overall_width_mm": 304.8,
+          "overall_depth_mm": 304.8,
+          "overall_height_mm": 24.384
+        },
+        "feature": {
+          "minimum_x_mm": -76.292964,
+          "maximum_x_mm": 76.292964,
+          "minimum_y_mm": -76.292964,
+          "maximum_y_mm": 76.292964,
+          "minimum_z_mm": 24.384,
+          "maximum_z_mm": 30.1752,
+          "overall_width_mm": 152.585928,
+          "overall_depth_mm": 152.585928,
+          "overall_height_mm": 5.7912
+        },
+        "overall_height_mm": 30.1752
+      }
+    },
+    {
+      "size": {
+        "key": "12in",
+        "label": "12 \u00d7 12 inch",
+        "width_mm": 304.8,
+        "depth_mm": 304.8,
+        "scale_factor": 3.048
+      },
+      "primitive": {
+        "primitive_id": "PRIM-0011",
+        "shape": "LIGHT_SOURCE",
+        "name": "Light Source",
+        "filename": "PRIM-0011_Light_Source",
+        "base_material": "Matte off-white PLA, PETG, resin, or nylon",
+        "feature_material": "Frosted translucent resin or acrylic",
+        "finish": "Matte base; frosted translucent bulb",
+        "functional_status": "Diffuser prototype; electronics are not included",
+        "fabrication_notes": "Quote the bulb as a separate translucent component. Optional warm LED integration may be quoted separately."
+      },
+      "parameters": {
+        "tile_width_mm": 304.8,
+        "tile_depth_mm": 304.8,
+        "tile_height_mm": 24.384,
+        "feature_width_mm": 167.64000000000001,
+        "feature_height_mm": 15.24,
+        "circle_segments": 96
+      },
+      "files": {
+        "assembled_stl": "12in/assembled/PRIM-0011_Light_Source_12in_assembled.stl",
+        "base_stl": "12in/components/base/PRIM-0011_Light_Source_12in_base.stl",
+        "feature_stl": "12in/components/feature/PRIM-0011_Light_Source_12in_feature.stl",
+        "isometric_render": "12in/renders/PRIM-0011_Light_Source_12in_isometric.png",
+        "top_render": "12in/renders/PRIM-0011_Light_Source_12in_top.png"
+      },
+      "bounds": {
+        "base": {
+          "minimum_x_mm": -152.4,
+          "maximum_x_mm": 152.4,
+          "minimum_y_mm": -152.4,
+          "maximum_y_mm": 152.4,
+          "minimum_z_mm": 0.0,
+          "maximum_z_mm": 24.384,
+          "overall_width_mm": 304.8,
+          "overall_depth_mm": 304.8,
+          "overall_height_mm": 24.384
+        },
+        "feature": {
+          "minimum_x_mm": -47.7774,
+          "maximum_x_mm": 47.7774,
+          "minimum_y_mm": -47.7774,
+          "maximum_y_mm": 47.7774,
+          "minimum_z_mm": 24.384,
+          "maximum_z_mm": 54.4068,
+          "overall_width_mm": 95.5548,
+          "overall_depth_mm": 95.5548,
+          "overall_height_mm": 30.022799999999997
+        },
+        "overall_height_mm": 54.4068
+      }
+    },
+    {
+      "size": {
+        "key": "12in",
+        "label": "12 \u00d7 12 inch",
+        "width_mm": 304.8,
+        "depth_mm": 304.8,
+        "scale_factor": 3.048
+      },
+      "primitive": {
+        "primitive_id": "PRIM-0012",
+        "shape": "WEIGHT",
+        "name": "Weight",
+        "filename": "PRIM-0012_Weight",
+        "base_material": "Matte off-white PLA, PETG, resin, or nylon",
+        "feature_material": "Metallic-finish polymer, metal-filled polymer, or fabricated metal",
+        "finish": "Matte base; brushed-metal cube",
+        "functional_status": "Symbolic weight unless physical ballast is separately specified",
+        "fabrication_notes": "Quote metallic polymer and actual metal alternatives. The cube is rotated 45 degrees and has chamfered corners."
+      },
+      "parameters": {
+        "tile_width_mm": 304.8,
+        "tile_depth_mm": 304.8,
+        "tile_height_mm": 24.384,
+        "feature_width_mm": 167.64000000000001,
+        "feature_height_mm": 15.24,
+        "circle_segments": 96
+      },
+      "files": {
+        "assembled_stl": "12in/assembled/PRIM-0012_Weight_12in_assembled.stl",
+        "base_stl": "12in/components/base/PRIM-0012_Weight_12in_base.stl",
+        "feature_stl": "12in/components/feature/PRIM-0012_Weight_12in_feature.stl",
+        "isometric_render": "12in/renders/PRIM-0012_Weight_12in_isometric.png",
+        "top_render": "12in/renders/PRIM-0012_Weight_12in_top.png"
+      },
+      "bounds": {
+        "base": {
+          "minimum_x_mm": -152.4,
+          "maximum_x_mm": 152.4,
+          "minimum_y_mm": -152.4,
+          "maximum_y_mm": 152.4,
+          "minimum_z_mm": 0.0,
+          "maximum_z_mm": 24.384,
+          "overall_width_mm": 304.8,
+          "overall_depth_mm": 304.8,
+          "overall_height_mm": 24.384
+        },
+        "feature": {
+          "minimum_x_mm": -67.92306519731865,
+          "maximum_x_mm": 67.92306519731865,
+          "minimum_y_mm": -67.92306519731865,
+          "maximum_y_mm": 67.92306519731865,
+          "minimum_z_mm": 24.384,
+          "maximum_z_mm": 124.968,
+          "overall_width_mm": 135.8461303946373,
+          "overall_depth_mm": 135.8461303946373,
+          "overall_height_mm": 100.584
+        },
+        "overall_height_mm": 124.968
+      }
+    },
+    {
+      "size": {
+        "key": "12in",
+        "label": "12 \u00d7 12 inch",
+        "width_mm": 304.8,
+        "depth_mm": 304.8,
+        "scale_factor": 3.048
+      },
+      "primitive": {
+        "primitive_id": "PRIM-0014",
+        "shape": "SENSOR",
+        "name": "Sensor",
+        "filename": "PRIM-0014_Sensor",
+        "base_material": "Matte off-white PLA, PETG, resin, or nylon",
+        "feature_material": "Gloss black resin, acrylic, PLA, or PETG",
+        "finish": "Matte base and recess; polished piano-black dome",
+        "functional_status": "Symbolic sensor housing; electronics are not included",
+        "fabrication_notes": "Quote the detector dome as a separately finished component. Optional electronic integration may be quoted separately."
+      },
+      "parameters": {
+        "tile_width_mm": 304.8,
+        "tile_depth_mm": 304.8,
+        "tile_height_mm": 24.384,
+        "feature_width_mm": 167.64000000000001,
+        "feature_height_mm": 15.24,
+        "circle_segments": 96
+      },
+      "files": {
+        "assembled_stl": "12in/assembled/PRIM-0014_Sensor_12in_assembled.stl",
+        "base_stl": "12in/components/base/PRIM-0014_Sensor_12in_base.stl",
+        "feature_stl": "12in/components/feature/PRIM-0014_Sensor_12in_feature.stl",
+        "isometric_render": "12in/renders/PRIM-0014_Sensor_12in_isometric.png",
+        "top_render": "12in/renders/PRIM-0014_Sensor_12in_top.png"
+      },
+      "bounds": {
+        "base": {
+          "minimum_x_mm": -152.4,
+          "maximum_x_mm": 152.4,
+          "minimum_y_mm": -152.4,
+          "maximum_y_mm": 152.4,
+          "minimum_z_mm": 0.0,
+          "maximum_z_mm": 24.384,
+          "overall_width_mm": 304.8,
+          "overall_depth_mm": 304.8,
+          "overall_height_mm": 24.384
+        },
+        "feature": {
+          "minimum_x_mm": -39.3954,
+          "maximum_x_mm": 39.3954,
+          "minimum_y_mm": -39.3954,
+          "maximum_y_mm": 39.3954,
+          "minimum_z_mm": 24.384,
+          "maximum_z_mm": 41.158668000000006,
+          "overall_width_mm": 78.7908,
+          "overall_depth_mm": 78.7908,
+          "overall_height_mm": 16.774668000000005
+        },
+        "overall_height_mm": 41.158668000000006
+      }
+    }
+  ]
+}

@@ -1,0 +1,57 @@
+Subject: Preliminary DFM and quotation request — Operational Worlds
+
+Hello,
+
+I am requesting a preliminary design-for-manufacturing review and
+quotation for five sculptural prototype tiles from the Operational
+Worlds project.
+
+The package contains each design at two exact base footprints:
+
+- 152.4 × 152.4 mm (nominal 6 × 6 inches)
+- 304.8 × 304.8 mm (nominal 12 × 12 inches)
+
+All STL numerical coordinates are in millimeters. Please do not
+automatically rescale the files.
+
+Please quote:
+
+- Quantity 1 of each primitive and size
+- Quantity 5 of each primitive and size
+- Quantity 15 of each primitive and size
+
+Please provide separate options for:
+
+1. Economy FDM prototype in PLA
+2. Durable FDM prototype in PETG or ASA
+3. Exhibition-quality process and surface finish
+4. Multi-part fabrication using the separate base and feature files
+
+The complete STL represents the assembled geometry. The components
+folder contains separate rectangular-base and operational-feature STLs
+for multi-material or separately finished fabrication.
+
+Please advise on:
+
+- recommended process and material;
+- wall thickness;
+- hollowing, ribbing, and infill;
+- base-flatness and warping risk;
+- support strategy and orientation;
+- mesh repairs or Boolean union;
+- insert tolerances;
+- finishing;
+- setup and engineering charges;
+- per-unit and total pricing;
+- lead time;
+- shipping;
+- preferred production file format.
+
+The Lens has no optical focal requirement. The Light Source and Sensor
+do not currently include electronics. The Weight is symbolic unless
+physical ballast is separately specified.
+
+Thank you,
+
+Daniel Ashley
+Operational Worlds Research Program
