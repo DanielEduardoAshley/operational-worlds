@@ -483,56 +483,6 @@ def rotational_profile_mesh(
     return result
 
 
-def chamfered_box_mesh(
-    *,
-    width_mm: float,
-    depth_mm: float,
-    height_mm: float,
-    chamfer_mm: float,
-    bottom_z_mm: float,
-) -> MeshData:
-    """Create a box with clipped vertical corners.
-    The eight-point outline gives the Weight a manufactured, machined
-    character while remaining simple and watertight.
-    """
-    if width_mm <= 0:
-        raise ValueError(
-            "width_mm must be greater than zero."
-        )
-    if depth_mm <= 0:
-        raise ValueError(
-            "depth_mm must be greater than zero."
-        )
-    if height_mm <= 0:
-        raise ValueError(
-            "height_mm must be greater than zero."
-        )
-    maximum_chamfer = min(
-        width_mm,
-        depth_mm,
-    ) / 4.0
-    chamfer = min(
-        max(chamfer_mm, 0.0),
-        maximum_chamfer,
-    )
-    half_width = width_mm / 2.0
-    half_depth = depth_mm / 2.0
-    outline = (
-        (-half_width + chamfer, -half_depth),
-        (half_width - chamfer, -half_depth),
-        (half_width, -half_depth + chamfer),
-        (half_width, half_depth - chamfer),
-        (half_width - chamfer, half_depth),
-        (-half_width + chamfer, half_depth),
-        (-half_width, half_depth - chamfer),
-        (-half_width, -half_depth + chamfer),
-    )
-    return extrude_polygon(
-        outline=outline,
-        bottom_z_mm=bottom_z_mm,
-        top_z_mm=bottom_z_mm + height_mm,
-    )
-
 # =====================================================================
 # Canonical invariant substrate
 # =====================================================================
@@ -952,55 +902,60 @@ def build_aperture_feature(
     )
 
 
-
 def build_water_droplet_feature(
     parameters: TileParameters,
 ) -> MeshData:
-    """Build the canonical OW09 circular surface-tension lens.
-    The feature is rotationally symmetric and perfectly circular from
-    above. It begins at the canonical tile surface without a pedestal.
-    """
-    diameter_mm = parameters.shape_width_mm * 0.76
-    radius_mm = diameter_mm / 2.0
-    rise_mm = min(
-        parameters.shape_height_mm * 1.45,
-        diameter_mm * 0.24,
+    diameter = parameters.shape_width_mm * 0.78
+    radius = diameter / 2.0
+
+    rise = min(
+        parameters.shape_height_mm * 1.55,
+        diameter * 0.28,
     )
-    base_z_mm = parameters.tile_height_mm
-    profile_segments = 24
+
+    base_z = parameters.tile_height_mm
+
     profile: list[tuple[float, float]] = [
-        (0.0, base_z_mm),
-        (radius_mm, base_z_mm),
+        (0.0, base_z),
+        (radius, base_z),
     ]
+
+    profile_segments = 18
+
     for index in range(1, profile_segments):
         fraction = index / profile_segments
+
         local_radius = (
-            radius_mm
+            radius
             * (1.0 - fraction)
         )
-        smoothstep = (
+
+        smooth = (
             fraction
             * fraction
             * (3.0 - 2.0 * fraction)
         )
-        height_fraction = smoothstep ** 0.88
+
         profile.append(
             (
                 local_radius,
-                base_z_mm
-                + rise_mm * height_fraction,
+                base_z
+                + rise
+                * smooth ** 0.82,
             )
         )
+
     profile.append(
         (
             0.0,
-            base_z_mm + rise_mm,
+            base_z + rise,
         )
     )
+
     return rotational_profile_mesh(
         profile=tuple(profile),
         segments=max(
-            72,
+            48,
             parameters.circle_segments,
         ),
     )
@@ -1009,149 +964,78 @@ def build_water_droplet_feature(
 def build_mirror_feature(
     parameters: TileParameters,
 ) -> MeshData:
-    """Build canonical OW10 as a recessed square mirror and thin bezel."""
-    mirror_width_mm = parameters.shape_width_mm * 0.82
-    mirror_depth_mm = mirror_width_mm
-    bezel_width_mm = max(
-        2.0,
-        mirror_width_mm * 0.055,
+    mirror_width = parameters.shape_width_mm
+    mirror_depth = mirror_width
+
+    mirror_thickness = max(
+        0.8,
+        parameters.shape_height_mm * 0.20,
     )
-    bezel_height_mm = max(
-        1.2,
-        parameters.shape_height_mm * 0.24,
-    )
-    mirror_thickness_mm = max(
-        0.7,
-        parameters.shape_height_mm * 0.14,
-    )
-    outer_width_mm = (
-        mirror_width_mm
-        + bezel_width_mm * 2.0
-    )
-    outer_depth_mm = (
-        mirror_depth_mm
-        + bezel_width_mm * 2.0
-    )
-    base_z_mm = parameters.tile_height_mm
-    top_bar = transform_mesh(
+
+    return transform_mesh(
         rectangular_prism(
-            width_mm=outer_width_mm,
-            depth_mm=bezel_width_mm,
-            height_mm=bezel_height_mm,
+            width_mm=mirror_width,
+            depth_mm=mirror_depth,
+            height_mm=mirror_thickness,
         ),
-        translate_y_mm=(
-            mirror_depth_mm / 2.0
-            + bezel_width_mm / 2.0
-        ),
-        translate_z_mm=base_z_mm,
-    )
-    bottom_bar = transform_mesh(
-        rectangular_prism(
-            width_mm=outer_width_mm,
-            depth_mm=bezel_width_mm,
-            height_mm=bezel_height_mm,
-        ),
-        translate_y_mm=-(
-            mirror_depth_mm / 2.0
-            + bezel_width_mm / 2.0
-        ),
-        translate_z_mm=base_z_mm,
-    )
-    left_bar = transform_mesh(
-        rectangular_prism(
-            width_mm=bezel_width_mm,
-            depth_mm=mirror_depth_mm,
-            height_mm=bezel_height_mm,
-        ),
-        translate_x_mm=-(
-            mirror_width_mm / 2.0
-            + bezel_width_mm / 2.0
-        ),
-        translate_z_mm=base_z_mm,
-    )
-    right_bar = transform_mesh(
-        rectangular_prism(
-            width_mm=bezel_width_mm,
-            depth_mm=mirror_depth_mm,
-            height_mm=bezel_height_mm,
-        ),
-        translate_x_mm=(
-            mirror_width_mm / 2.0
-            + bezel_width_mm / 2.0
-        ),
-        translate_z_mm=base_z_mm,
-    )
-    mirror_surface = transform_mesh(
-        rectangular_prism(
-            width_mm=mirror_width_mm,
-            depth_mm=mirror_depth_mm,
-            height_mm=mirror_thickness_mm,
-        ),
-        translate_z_mm=(
-            base_z_mm
-            + bezel_height_mm
-        ),
-    )
-    return combine_meshes(
-        top_bar,
-        bottom_bar,
-        left_bar,
-        right_bar,
-        mirror_surface,
+        translate_z_mm=parameters.tile_height_mm,
     )
 
 
 def build_light_source_feature(
     parameters: TileParameters,
 ) -> MeshData:
-    """Build canonical OW11 as a low frosted bulb with a short neck."""
-    bulb_radius_mm = parameters.shape_width_mm * 0.285
-    neck_radius_mm = bulb_radius_mm * 0.43
-    neck_height_mm = max(
-        1.7,
-        parameters.shape_height_mm * 0.32,
+    """Create a low bulb directly on the rectangular substrate."""
+
+    bulb_radius = parameters.shape_width_mm * 0.30
+
+    neck_radius = bulb_radius * 0.46
+
+    neck_height = max(
+        1.8,
+        parameters.shape_height_mm * 0.34,
     )
-    bulb_height_mm = min(
-        parameters.shape_height_mm * 1.65,
-        bulb_radius_mm * 1.02,
+
+    bulb_height = min(
+        parameters.shape_height_mm * 1.85,
+        bulb_radius * 1.15,
     )
-    base_z_mm = parameters.tile_height_mm
-    neck_top_mm = base_z_mm + neck_height_mm
-    crown_top_mm = neck_top_mm + bulb_height_mm
+
+    base_z = parameters.tile_height_mm
+    neck_top = base_z + neck_height
+    top = neck_top + bulb_height
+
     profile = (
-        (0.0, base_z_mm),
-        (neck_radius_mm, base_z_mm),
-        (neck_radius_mm, neck_top_mm),
+        (0.0, base_z),
+        (neck_radius, base_z),
+        (neck_radius, neck_top),
         (
-            bulb_radius_mm * 0.70,
-            neck_top_mm + bulb_height_mm * 0.08,
+            bulb_radius * 0.76,
+            neck_top + bulb_height * 0.10,
         ),
         (
-            bulb_radius_mm * 0.91,
-            neck_top_mm + bulb_height_mm * 0.27,
+            bulb_radius * 0.96,
+            neck_top + bulb_height * 0.32,
         ),
         (
-            bulb_radius_mm,
-            neck_top_mm + bulb_height_mm * 0.48,
+            bulb_radius,
+            neck_top + bulb_height * 0.50,
         ),
         (
-            bulb_radius_mm * 0.92,
-            neck_top_mm + bulb_height_mm * 0.69,
+            bulb_radius * 0.90,
+            neck_top + bulb_height * 0.72,
         ),
         (
-            bulb_radius_mm * 0.69,
-            neck_top_mm + bulb_height_mm * 0.88,
+            bulb_radius * 0.63,
+            neck_top + bulb_height * 0.91,
         ),
-        (
-            bulb_radius_mm * 0.34,
-            neck_top_mm + bulb_height_mm * 0.98,
-        ),
-        (0.0, crown_top_mm),
+        (0.0, top),
     )
+
     return rotational_profile_mesh(
         profile=profile,
         segments=max(
-            72,
+            48,
             parameters.circle_segments,
         ),
     )
@@ -1160,28 +1044,26 @@ def build_light_source_feature(
 def build_weight_feature(
     parameters: TileParameters,
 ) -> MeshData:
-    """Build canonical OW12 as a rotated chamfered metal cube."""
-    cube_size_mm = min(
-        parameters.shape_width_mm * 0.60,
-        parameters.tile_width_mm * 0.44,
-        parameters.tile_depth_mm * 0.44,
+    """Create the canonical metal cube directly on the tile."""
+
+    cube_size = min(
+        parameters.shape_width_mm * 0.58,
+        parameters.tile_width_mm * 0.42,
+        parameters.tile_depth_mm * 0.42,
     )
-    chamfer_mm = max(
-        1.2,
-        cube_size_mm * 0.045,
+
+    cube = rectangular_prism(
+        width_mm=cube_size,
+        depth_mm=cube_size,
+        height_mm=cube_size,
     )
-    cube = chamfered_box_mesh(
-        width_mm=cube_size_mm,
-        depth_mm=cube_size_mm,
-        height_mm=cube_size_mm,
-        chamfer_mm=chamfer_mm,
-        bottom_z_mm=0.0,
-    )
+
     return transform_mesh(
         cube,
         rotate_z_degrees=45.0,
         translate_z_mm=parameters.tile_height_mm,
     )
+
 
 def build_threshold_feature(
     parameters: TileParameters,
@@ -1214,79 +1096,72 @@ def build_threshold_feature(
     )
 
 
-
 def build_sensor_feature(
     parameters: TileParameters,
 ) -> MeshData:
-    """Build canonical OW14 as a small black dome in a shallow recess."""
-    recess_radius_mm = parameters.shape_width_mm * 0.235
-    recess_height_mm = max(
-        0.9,
-        parameters.shape_height_mm * 0.18,
+    """Create a small black spherical dome directly on the tile."""
+
+    sphere_radius = (
+        parameters.shape_width_mm
+        * 0.15
     )
-    base_z_mm = parameters.tile_height_mm
-    recess = transform_mesh(
-        cylinder_mesh(
-            radius_mm=recess_radius_mm,
-            length_mm=recess_height_mm,
-            segments=max(
-                72,
-                parameters.circle_segments,
-            ),
-            axis="Z",
-        ),
-        translate_z_mm=base_z_mm,
+
+    exposed_height = (
+        sphere_radius
+        * 0.58
     )
-    sphere_radius_mm = parameters.shape_width_mm * 0.135
-    exposed_height_mm = (
-        sphere_radius_mm * 0.62
-    )
-    dome_base_z_mm = (
-        base_z_mm
-        + recess_height_mm
-    )
-    profile_segments = 18
+
+    base_z = parameters.tile_height_mm
+
     profile: list[tuple[float, float]] = [
-        (0.0, dome_base_z_mm),
+        (0.0, base_z),
     ]
+
+    profile_segments = 14
+
     for index in range(profile_segments + 1):
-        fraction = index / profile_segments
-        z_from_center = (
-            -sphere_radius_mm
-            + exposed_height_mm
-            + exposed_height_mm * fraction
+        fraction = (
+            index / profile_segments
         )
-        ring_radius_mm = math.sqrt(
+
+        z_from_center = (
+            sphere_radius
+            - exposed_height
+            + exposed_height * fraction
+        )
+
+        ring_radius = math.sqrt(
             max(
                 0.0,
-                sphere_radius_mm ** 2
+                sphere_radius ** 2
                 - z_from_center ** 2,
             )
         )
+
         profile.append(
             (
-                ring_radius_mm,
-                dome_base_z_mm
-                + exposed_height_mm * fraction,
+                ring_radius,
+                base_z
+                + exposed_height
+                * fraction,
             )
         )
+
     profile.append(
         (
             0.0,
-            dome_base_z_mm + exposed_height_mm,
+            base_z + exposed_height,
         )
     )
-    dome = rotational_profile_mesh(
+
+    return rotational_profile_mesh(
         profile=tuple(profile),
         segments=max(
-            72,
+            48,
             parameters.circle_segments,
         ),
     )
-    return combine_meshes(
-        recess,
-        dome,
-    )
+
 
 def build_handle_feature(
     parameters: TileParameters,

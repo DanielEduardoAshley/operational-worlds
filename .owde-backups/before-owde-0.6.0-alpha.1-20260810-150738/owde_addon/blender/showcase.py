@@ -20,7 +20,7 @@ from .materials import (
 
 MM_TO_METERS = 0.001
 SHOWCASE_COLLECTION_NAME = "OWDE Showcase"
-SHOWCASE_RELEASE = "0.6.0-alpha.1"
+SHOWCASE_RELEASE = "0.5.0-alpha.2"
 
 
 SHOWCASE_SHAPES = (

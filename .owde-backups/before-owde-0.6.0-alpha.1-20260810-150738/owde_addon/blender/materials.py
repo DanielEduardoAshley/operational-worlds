@@ -357,7 +357,16 @@ def assign_canonical_materials(
     shape: ShapeType,
     tile_height_mm: float,
 ) -> None:
-    """Assign tile and feature materials within one combined mesh."""
+    """Assign tile and feature materials within one combined mesh.
+
+    OWDE core geometry combines separate closed shells into one MeshData.
+    The base occupies Z=0 through tile_height_mm. A polygon belongs to
+    the special feature when it includes at least one vertex above that
+    height.
+
+    This leaves the base tile off-white while assigning glass, chrome,
+    emissive, metal, or piano-black material only to raised geometry.
+    """
 
     mesh = object_.data
     mesh.materials.clear()
@@ -383,13 +392,13 @@ def assign_canonical_materials(
             for index in polygon.vertices
         ]
 
-        maximum_height = max(vertex_heights)
-        feature_threshold = tile_height_m + epsilon
+        is_feature = any(
+            height > tile_height_m + epsilon
+            for height in vertex_heights
+        )
 
         polygon.material_index = (
-            1
-            if maximum_height > feature_threshold
-            else 0
+            1 if is_feature else 0
         )
 
 
