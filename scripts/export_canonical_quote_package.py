@@ -1297,21 +1297,6 @@ def build_package(
                 primitive.shape,
             )
 
-            if primitive.shape is ShapeType.WEIGHT:
-                modifier = feature_object.modifiers.new(
-                    name="Quote Edge Chamfer",
-                    type="BEVEL",
-                )
-
-                modifier.width = (
-                    1.4
-                    * size.scale_factor
-                    * MM_TO_METERS
-                )
-
-                modifier.segments = 3
-                modifier.limit_method = "ANGLE"
-
             stem = (
                 f"{primitive.filename}_"
                 f"{size.key}"

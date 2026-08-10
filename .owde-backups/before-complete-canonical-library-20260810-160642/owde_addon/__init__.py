@@ -1,0 +1,78 @@
+bl_info = {
+    "name": "Operational Worlds Design Engine",
+    "author": "Operational Worlds Research Program",
+    "version": (0, 6, 0),
+    "blender": (4, 2, 0),
+    "location": "View3D > Sidebar > Operational Worlds",
+    "description": "Create, inspect, render, and export parametric Operational Worlds primitives",
+    "category": "Add Mesh",
+}
+
+
+def register() -> None:
+    import bpy
+
+    from .blender import (
+        OWDE_OT_create_primitive_gallery,
+        OWDE_OT_create_showcase,
+        OWDE_OT_create_tile,
+        OWDE_OT_frame_primitive_gallery,
+        OWDE_PG_settings,
+        OWDE_PT_primitive_inspector,
+        OWDE_PT_showcase,
+        OWDE_PT_tile_builder,
+    )
+
+    classes = (
+        OWDE_PG_settings,
+        OWDE_OT_create_tile,
+        OWDE_OT_create_primitive_gallery,
+        OWDE_OT_frame_primitive_gallery,
+        OWDE_OT_create_showcase,
+        OWDE_PT_tile_builder,
+        OWDE_PT_primitive_inspector,
+        OWDE_PT_showcase,
+    )
+
+    for class_ in classes:
+        bpy.utils.register_class(class_)
+
+    bpy.types.Scene.owde_settings = bpy.props.PointerProperty(
+        type=OWDE_PG_settings
+    )
+
+
+def unregister() -> None:
+    import bpy
+
+    from .blender import (
+        OWDE_OT_create_primitive_gallery,
+        OWDE_OT_create_showcase,
+        OWDE_OT_create_tile,
+        OWDE_OT_frame_primitive_gallery,
+        OWDE_PG_settings,
+        OWDE_PT_primitive_inspector,
+        OWDE_PT_showcase,
+        OWDE_PT_tile_builder,
+    )
+
+    if hasattr(bpy.types.Scene, "owde_settings"):
+        del bpy.types.Scene.owde_settings
+
+    classes = (
+        OWDE_PG_settings,
+        OWDE_OT_create_tile,
+        OWDE_OT_create_primitive_gallery,
+        OWDE_OT_frame_primitive_gallery,
+        OWDE_OT_create_showcase,
+        OWDE_PT_tile_builder,
+        OWDE_PT_primitive_inspector,
+        OWDE_PT_showcase,
+    )
+
+    for class_ in reversed(classes):
+        bpy.utils.unregister_class(class_)
+
+
+if __name__ == "__main__":
+    register()

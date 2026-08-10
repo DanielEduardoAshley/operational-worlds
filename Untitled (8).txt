@@ -1,0 +1,566 @@
+python3 <<'PY'
+from pathlib import Path
+import re
+
+path = Path("owde_addon/core/builders.py")
+text = path.read_text(encoding="utf-8")
+
+
+def replace_function(
+    source: str,
+    name: str,
+    replacement: str,
+) -> str:
+    pattern = re.compile(
+        rf"^def {re.escape(name)}\("
+        rf".*?"
+        rf"(?=^def |\Z)",
+        flags=re.MULTILINE | re.DOTALL,
+    )
+
+    updated, count = pattern.subn(
+        replacement.rstrip() + "\n\n",
+        source,
+        count=1,
+    )
+
+    if count != 1:
+        raise SystemExit(
+            f"Could not replace {name}()."
+        )
+
+    return updated
+
+
+raised = r'''
+def build_raised_outline_feature(
+    parameters: TileParameters,
+) -> MeshData:
+    """Build canonical OW01-OW04 raised geometric bosses.
+
+    All four use the same height and top-edge treatment. Primitive
+    identity comes only from plan geometry.
+    """
+
+    outline = shape_outline(parameters)
+
+    feature_height_mm = (
+        parameters.shape_height_mm
+    )
+
+    chamfer_mm = max(
+        0.6,
+        min(
+            feature_height_mm * 0.22,
+            parameters.shape_width_mm * 0.025,
+        ),
+    )
+
+    return chamfered_extruded_polygon(
+        outline=outline,
+        bottom_z_mm=parameters.tile_height_mm,
+        height_mm=feature_height_mm,
+        chamfer_mm=chamfer_mm,
+    )
+'''
+
+slot = r'''
+def build_slot_feature(
+    parameters: TileParameters,
+) -> MeshData:
+    """Build canonical OW05 as a restrained capsule-shaped slot surround.
+
+    The dark inset remains a separately finished component. The
+    canonical structural feature is a shallow capsule lip.
+    """
+
+    slot_length_mm = (
+        parameters.shape_width_mm
+    )
+
+    slot_width_mm = max(
+        8.0,
+        min(
+            parameters.shape_width_mm * 0.22,
+            parameters.shape_height_mm * 2.6,
+        ),
+    )
+
+    lip_extra_mm = max(
+        1.8,
+        slot_width_mm * 0.15,
+    )
+
+    outer_outline = capsule_outline(
+        length_mm=(
+            slot_length_mm
+            + lip_extra_mm * 2.0
+        ),
+        width_mm=(
+            slot_width_mm
+            + lip_extra_mm * 2.0
+        ),
+        segments_per_end=max(
+            18,
+            parameters.circle_segments // 4,
+        ),
+    )
+
+    lip_height_mm = max(
+        0.9,
+        parameters.shape_height_mm * 0.20,
+    )
+
+    return chamfered_extruded_polygon(
+        outline=outer_outline,
+        bottom_z_mm=parameters.tile_height_mm,
+        height_mm=lip_height_mm,
+        chamfer_mm=min(
+            0.45,
+            lip_height_mm * 0.35,
+        ),
+    )
+'''
+
+hinge = r'''
+def build_hinge_feature(
+    parameters: TileParameters,
+) -> MeshData:
+    """Build canonical OW06 as a three-knuckle barrel hinge."""
+
+    hinge_length_mm = (
+        parameters.shape_width_mm
+    )
+
+    barrel_radius_mm = max(
+        3.2,
+        parameters.shape_height_mm * 0.72,
+    )
+
+    leaf_thickness_mm = max(
+        1.2,
+        parameters.shape_height_mm * 0.22,
+    )
+
+    leaf_width_mm = max(
+        10.0,
+        parameters.shape_width_mm * 0.22,
+    )
+
+    center_z_mm = (
+        parameters.tile_height_mm
+        + barrel_radius_mm
+    )
+
+    gap_mm = max(
+        0.8,
+        barrel_radius_mm * 0.18,
+    )
+
+    knuckle_length_mm = (
+        hinge_length_mm
+        - gap_mm * 2.0
+    ) / 3.0
+
+    knuckles: list[MeshData] = []
+
+    positions = (
+        -(
+            knuckle_length_mm
+            + gap_mm
+        ),
+        0.0,
+        (
+            knuckle_length_mm
+            + gap_mm
+        ),
+    )
+
+    for y_mm in positions:
+        knuckles.append(
+            transform_mesh(
+                cylinder_mesh(
+                    radius_mm=barrel_radius_mm,
+                    length_mm=knuckle_length_mm,
+                    segments=max(
+                        48,
+                        parameters.circle_segments,
+                    ),
+                    axis="Y",
+                ),
+                translate_y_mm=y_mm,
+                translate_z_mm=center_z_mm,
+            )
+        )
+
+    pin = transform_mesh(
+        cylinder_mesh(
+            radius_mm=barrel_radius_mm * 0.30,
+            length_mm=hinge_length_mm * 1.06,
+            segments=max(
+                36,
+                parameters.circle_segments,
+            ),
+            axis="Y",
+        ),
+        translate_z_mm=center_z_mm,
+    )
+
+    leaf_depth_mm = hinge_length_mm * 0.84
+
+    left_leaf = transform_mesh(
+        rectangular_prism(
+            width_mm=leaf_width_mm,
+            depth_mm=leaf_depth_mm,
+            height_mm=leaf_thickness_mm,
+        ),
+        translate_x_mm=-(
+            barrel_radius_mm
+            + leaf_width_mm / 2.0
+        ),
+        translate_z_mm=parameters.tile_height_mm,
+    )
+
+    right_leaf = transform_mesh(
+        rectangular_prism(
+            width_mm=leaf_width_mm,
+            depth_mm=leaf_depth_mm,
+            height_mm=leaf_thickness_mm,
+        ),
+        translate_x_mm=(
+            barrel_radius_mm
+            + leaf_width_mm / 2.0
+        ),
+        translate_z_mm=parameters.tile_height_mm,
+    )
+
+    return combine_meshes(
+        left_leaf,
+        right_leaf,
+        *knuckles,
+        pin,
+    )
+'''
+
+fold = r'''
+def build_fold_feature(
+    parameters: TileParameters,
+) -> MeshData:
+    """Build canonical OW07 as a fixed sheet-like plane folded upward."""
+
+    fold_width_mm = (
+        parameters.shape_width_mm
+    )
+
+    panel_depth_mm = min(
+        parameters.shape_width_mm * 0.70,
+        parameters.tile_depth_mm * 0.58,
+    )
+
+    sheet_thickness_mm = max(
+        1.2,
+        parameters.shape_height_mm * 0.24,
+    )
+
+    angle_degrees = 52.0
+
+    anchor_depth_mm = max(
+        8.0,
+        panel_depth_mm * 0.22,
+    )
+
+    anchor = transform_mesh(
+        rectangular_prism(
+            width_mm=fold_width_mm,
+            depth_mm=anchor_depth_mm,
+            height_mm=sheet_thickness_mm,
+        ),
+        translate_y_mm=-(
+            anchor_depth_mm / 2.0
+        ),
+        translate_z_mm=parameters.tile_height_mm,
+    )
+
+    panel = rectangular_prism(
+        width_mm=fold_width_mm,
+        depth_mm=sheet_thickness_mm,
+        height_mm=panel_depth_mm,
+    )
+
+    panel = transform_mesh(
+        panel,
+        rotate_x_degrees=angle_degrees,
+        translate_y_mm=0.0,
+        translate_z_mm=(
+            parameters.tile_height_mm
+            + sheet_thickness_mm * 0.35
+        ),
+    )
+
+    crease = transform_mesh(
+        cylinder_mesh(
+            radius_mm=sheet_thickness_mm * 0.62,
+            length_mm=fold_width_mm,
+            segments=max(
+                32,
+                parameters.circle_segments // 2,
+            ),
+            axis="X",
+        ),
+        translate_z_mm=(
+            parameters.tile_height_mm
+            + sheet_thickness_mm * 0.55
+        ),
+    )
+
+    return combine_meshes(
+        anchor,
+        panel,
+        crease,
+    )
+'''
+
+aperture = r'''
+def build_aperture_feature(
+    parameters: TileParameters,
+) -> MeshData:
+    """Build canonical OW08 as a circular aperture bezel.
+
+    The dark recessed backing remains a separate component so the
+    aperture visually reads as depth while preserving the invariant
+    external tile footprint.
+    """
+
+    opening_radius_mm = (
+        parameters.shape_width_mm
+        * 0.42
+    )
+
+    bezel_width_mm = max(
+        2.2,
+        parameters.shape_width_mm * 0.055,
+    )
+
+    bezel_height_mm = max(
+        1.0,
+        parameters.shape_height_mm * 0.20,
+    )
+
+    return annular_cylinder_mesh(
+        outer_radius_mm=(
+            opening_radius_mm
+            + bezel_width_mm
+        ),
+        inner_radius_mm=opening_radius_mm,
+        height_mm=bezel_height_mm,
+        bottom_z_mm=parameters.tile_height_mm,
+        segments=max(
+            72,
+            parameters.circle_segments,
+        ),
+    )
+'''
+
+threshold = r'''
+def build_threshold_feature(
+    parameters: TileParameters,
+) -> MeshData:
+    """Build canonical OW13 as a low chamfered boundary bar."""
+
+    length_mm = min(
+        parameters.shape_width_mm * 1.10,
+        parameters.tile_width_mm * 0.78,
+    )
+
+    depth_mm = max(
+        8.0,
+        parameters.shape_width_mm * 0.17,
+    )
+
+    height_mm = max(
+        2.4,
+        parameters.shape_height_mm * 0.65,
+    )
+
+    outline = (
+        (-length_mm / 2.0, -depth_mm / 2.0),
+        (length_mm / 2.0, -depth_mm / 2.0),
+        (length_mm / 2.0, depth_mm / 2.0),
+        (-length_mm / 2.0, depth_mm / 2.0),
+    )
+
+    return chamfered_extruded_polygon(
+        outline=outline,
+        bottom_z_mm=parameters.tile_height_mm,
+        height_mm=height_mm,
+        chamfer_mm=min(
+            1.2,
+            height_mm * 0.28,
+        ),
+    )
+'''
+
+handle = r'''
+def build_handle_feature(
+    parameters: TileParameters,
+) -> MeshData:
+    """Build canonical OW15 as a simple rounded bridge handle."""
+
+    total_width_mm = (
+        parameters.shape_width_mm
+    )
+
+    post_radius_mm = max(
+        2.6,
+        parameters.shape_height_mm * 0.55,
+    )
+
+    clearance_mm = max(
+        12.0,
+        parameters.shape_height_mm * 2.8,
+    )
+
+    support_offset_mm = (
+        total_width_mm / 2.0
+        - post_radius_mm * 1.5
+    )
+
+    post_height_mm = (
+        clearance_mm
+        + post_radius_mm
+    )
+
+    left_post = transform_mesh(
+        cylinder_mesh(
+            radius_mm=post_radius_mm,
+            length_mm=post_height_mm,
+            segments=max(
+                48,
+                parameters.circle_segments,
+            ),
+            axis="Z",
+        ),
+        translate_x_mm=-support_offset_mm,
+        translate_z_mm=parameters.tile_height_mm,
+    )
+
+    right_post = transform_mesh(
+        cylinder_mesh(
+            radius_mm=post_radius_mm,
+            length_mm=post_height_mm,
+            segments=max(
+                48,
+                parameters.circle_segments,
+            ),
+            axis="Z",
+        ),
+        translate_x_mm=support_offset_mm,
+        translate_z_mm=parameters.tile_height_mm,
+    )
+
+    grip_length_mm = (
+        support_offset_mm * 2.0
+    )
+
+    grip = transform_mesh(
+        cylinder_mesh(
+            radius_mm=post_radius_mm,
+            length_mm=grip_length_mm,
+            segments=max(
+                48,
+                parameters.circle_segments,
+            ),
+            axis="X",
+        ),
+        translate_z_mm=(
+            parameters.tile_height_mm
+            + post_height_mm
+        ),
+    )
+
+    left_foot = transform_mesh(
+        cylinder_mesh(
+            radius_mm=post_radius_mm * 1.45,
+            length_mm=max(
+                1.2,
+                post_radius_mm * 0.48,
+            ),
+            segments=max(
+                48,
+                parameters.circle_segments,
+            ),
+            axis="Z",
+        ),
+        translate_x_mm=-support_offset_mm,
+        translate_z_mm=parameters.tile_height_mm,
+    )
+
+    right_foot = transform_mesh(
+        cylinder_mesh(
+            radius_mm=post_radius_mm * 1.45,
+            length_mm=max(
+                1.2,
+                post_radius_mm * 0.48,
+            ),
+            segments=max(
+                48,
+                parameters.circle_segments,
+            ),
+            axis="Z",
+        ),
+        translate_x_mm=support_offset_mm,
+        translate_z_mm=parameters.tile_height_mm,
+    )
+
+    return combine_meshes(
+        left_foot,
+        right_foot,
+        left_post,
+        right_post,
+        grip,
+    )
+'''
+
+for name, replacement in (
+    (
+        "build_raised_outline_feature",
+        raised,
+    ),
+    (
+        "build_slot_feature",
+        slot,
+    ),
+    (
+        "build_hinge_feature",
+        hinge,
+    ),
+    (
+        "build_fold_feature",
+        fold,
+    ),
+    (
+        "build_aperture_feature",
+        aperture,
+    ),
+    (
+        "build_threshold_feature",
+        threshold,
+    ),
+    (
+        "build_handle_feature",
+        handle,
+    ),
+):
+    text = replace_function(
+        text,
+        name,
+        replacement,
+    )
+
+path.write_text(
+    text,
+    encoding="utf-8",
+)
+
+print("Canonicalized OW01-OW08, OW13 and OW15.")
+PY

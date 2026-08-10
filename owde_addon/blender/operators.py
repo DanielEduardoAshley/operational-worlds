@@ -8,7 +8,7 @@ from .adapter import create_blender_object
 
 MM_TO_METERS = 0.001
 GALLERY_COLLECTION_NAME = "OWDE Primitive Gallery"
-OWDE_VERSION = "0.6.0-alpha.1"
+OWDE_VERSION = "0.6.0-alpha.2"
 
 GALLERY_SHAPES = (
     ShapeType.CIRCLE,
@@ -395,7 +395,12 @@ def create_dark_circular_insert(
     world_location = (
         parent_object.location.x,
         parent_object.location.y,
-        parent_object.location.z + depth_m / 2.0,
+        parent_object.location.z
+        + (
+            parameters.tile_height_mm
+            * MM_TO_METERS
+        )
+        + depth_m / 2.0,
     )
 
     bpy.ops.mesh.primitive_cylinder_add(
@@ -463,7 +468,12 @@ def create_dark_slot_insert(
         location=(
             parent_object.location.x,
             parent_object.location.y,
-            parent_object.location.z + depth_m / 2.0,
+            parent_object.location.z
+        + (
+            parameters.tile_height_mm
+            * MM_TO_METERS
+        )
+        + depth_m / 2.0,
         )
     )
 
@@ -499,7 +509,11 @@ def create_dark_slot_insert(
                 / 2.0
                 * MM_TO_METERS,
                 parent_object.location.y,
-                parent_object.location.z
+                    parent_object.location.z
+                + (
+                    parameters.tile_height_mm
+                    * MM_TO_METERS
+                )
                 + depth_m / 2.0,
             ),
         )

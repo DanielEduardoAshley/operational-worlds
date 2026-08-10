@@ -20,7 +20,7 @@ from .materials import (
 
 MM_TO_METERS = 0.001
 SHOWCASE_COLLECTION_NAME = "OWDE Showcase"
-SHOWCASE_RELEASE = "0.6.0-alpha.1"
+SHOWCASE_RELEASE = "0.6.0-alpha.2"
 
 
 SHOWCASE_SHAPES = (
@@ -858,15 +858,6 @@ class OWDE_OT_create_showcase(
                 shape,
                 parameters.tile_height_mm,
             )
-
-            if shape is ShapeType.WEIGHT:
-                bevel = object_.modifiers.new(
-                    name="OWDE Weight Edge Chamfer",
-                    type="BEVEL",
-                )
-                bevel.width = 1.2 * MM_TO_METERS
-                bevel.segments = 3
-                bevel.limit_method = "ANGLE"
 
             apply_canonical_shading(
                 object_,

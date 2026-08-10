@@ -533,6 +533,328 @@ def chamfered_box_mesh(
         top_z_mm=bottom_z_mm + height_mm,
     )
 
+
+def scale_outline(
+    outline: Sequence[Point2D],
+    scale: float,
+) -> tuple[Point2D, ...]:
+    """Scale a centered 2D polygon around the origin."""
+
+    if scale <= 0:
+        raise ValueError(
+            "Outline scale must be greater than zero."
+        )
+
+    return tuple(
+        (
+            x * scale,
+            y * scale,
+        )
+        for x, y in outline
+    )
+
+
+def chamfered_extruded_polygon(
+    *,
+    outline: Sequence[Point2D],
+    bottom_z_mm: float,
+    height_mm: float,
+    chamfer_mm: float,
+) -> MeshData:
+    """Extrude a polygon with a small canonical top-edge chamfer."""
+
+    if height_mm <= 0:
+        raise ValueError(
+            "height_mm must be greater than zero."
+        )
+
+    if len(outline) < 3:
+        raise ValueError(
+            "Outline requires at least three points."
+        )
+
+    chamfer = min(
+        max(chamfer_mm, 0.0),
+        height_mm * 0.45,
+    )
+
+    maximum_radius = max(
+        math.hypot(x, y)
+        for x, y in outline
+    )
+
+    if maximum_radius <= 0:
+        raise ValueError(
+            "Outline must have non-zero radius."
+        )
+
+    inset_scale = max(
+        0.70,
+        1.0 - chamfer / maximum_radius,
+    )
+
+    middle_z = (
+        bottom_z_mm
+        + height_mm
+        - chamfer
+    )
+
+    top_z = (
+        bottom_z_mm
+        + height_mm
+    )
+
+    lower = tuple(outline)
+    middle = tuple(outline)
+    upper = scale_outline(
+        outline,
+        inset_scale,
+    )
+
+    count = len(lower)
+
+    vertices = (
+        tuple(
+            (x, y, bottom_z_mm)
+            for x, y in lower
+        )
+        + tuple(
+            (x, y, middle_z)
+            for x, y in middle
+        )
+        + tuple(
+            (x, y, top_z)
+            for x, y in upper
+        )
+    )
+
+    faces: list[tuple[int, ...]] = []
+
+    faces.append(
+        tuple(
+            reversed(
+                range(count)
+          )
+        )
+    )
+
+    for index in range(count):
+        next_index = (
+            index + 1
+        ) % count
+
+        faces.append(
+            (
+                index,
+                next_index,
+                count + next_index,
+                count + index,
+            )
+        )
+
+    for index in range(count):
+        next_index = (
+            index + 1
+        ) % count
+
+        faces.append(
+            (
+                count + index,
+                count + next_index,
+                count * 2 + next_index,
+                count * 2 + index,
+            )
+        )
+
+    faces.append(
+        tuple(
+            range(
+                count * 2,
+                count * 3,
+            )
+        )
+    )
+
+    result = MeshData(
+        vertices=vertices,
+        faces=tuple(faces),
+    )
+
+    result.validate()
+    return result
+
+
+def capsule_outline(
+    *,
+    length_mm: float,
+    width_mm: float,
+    segments_per_end: int = 24,
+) -> tuple[Point2D, ...]:
+    """Create a horizontal capsule outline."""
+
+    if length_mm <= width_mm:
+        raise ValueError(
+            "Capsule length must exceed width."
+        )
+
+    if width_mm <= 0:
+        raise ValueError(
+            "Capsule width must be greater than zero."
+        )
+
+    radius = width_mm / 2.0
+    half_straight = (
+        length_mm - width_mm
+    ) / 2.0
+
+    points: list[Point2D] = []
+
+    for index in range(
+        segments_per_end + 1
+    ):
+        angle = (
+            -math.pi / 2.0
+            + index
+            * math.pi
+            / segments_per_end
+        )
+
+        points.append(
+            (
+                half_straight
+                + radius * math.cos(angle),
+                radius * math.sin(angle),
+            )
+        )
+
+    for index in range(
+        segments_per_end + 1
+    ):
+        angle = (
+            math.pi / 2.0
+            + index
+            * math.pi
+            / segments_per_end
+        )
+
+        points.append(
+            (
+                -half_straight
+                + radius * math.cos(angle),
+            radius * math.sin(angle),
+            )
+        )
+
+    return tuple(points)
+
+
+def annular_cylinder_mesh(
+    *,
+    outer_radius_mm: float,
+    inner_radius_mm: float,
+    height_mm: float,
+    bottom_z_mm: float,
+    segments: int,
+) -> MeshData:
+    """Create a watertight annular bezel."""
+
+    if outer_radius_mm <= inner_radius_mm:
+        raise ValueError(
+            "Outer radius must exceed inner radius."
+        )
+
+    if inner_radius_mm <= 0:
+        raise ValueError(
+            "Inner radius must be greater than zero."
+        )
+
+    vertices: list[Point3D] = []
+
+    for z in (
+        bottom_z_mm,
+        bottom_z_mm + height_mm,
+    ):
+        for radius in (
+            outer_radius_mm,
+            inner_radius_mm,
+        ):
+            for index in range(segments):
+                angle = (
+                    2.0
+                    * math.pi
+                    * index
+                    / segments
+                )
+
+                vertices.append(
+                    (
+                        radius * math.cos(angle),
+                        radius * math.sin(angle),
+                        z,
+                    )
+                )
+
+    outer_bottom = 0
+    inner_bottom = segments
+    outer_top = segments * 2
+    inner_top = segments * 3
+
+    faces: list[tuple[int, ...]] = []
+
+    for index in range(segments):
+        next_index = (
+            index + 1
+        ) % segments
+
+        # Outer wall.
+        faces.append(
+            (
+                outer_bottom + index,
+                outer_bottom + next_index,
+                outer_top + next_index,
+                outer_top + index,
+            )
+        )
+
+        # Inner wall.
+        faces.append(
+            (
+                inner_bottom + next_index,
+                inner_bottom + index,
+                inner_top + index,
+                inner_top + next_index,
+            )
+        )
+
+        # Top annulus.
+        faces.append(
+            (
+                outer_top + index,
+                outer_top + next_index,
+                inner_top + next_index,
+                inner_top + index,
+            )
+        )
+
+        # Bottom annulus.
+        faces.append(
+            (
+                outer_bottom + next_index,
+                outer_bottom + index,
+                inner_bottom + index,
+                inner_bottom + next_index,
+            )
+        )
+
+    result = MeshData(
+        vertices=tuple(vertices),
+        faces=tuple(faces),
+    )
+
+    result.validate()
+    return result
+
+
 # =====================================================================
 # Canonical invariant substrate
 # =====================================================================
@@ -574,195 +896,202 @@ def square_tile_base(
 # Primitive feature generators
 # =====================================================================
 
+
 def build_raised_outline_feature(
     parameters: TileParameters,
 ) -> MeshData:
-    return extrude_polygon(
-        outline=shape_outline(parameters),
-        bottom_z_mm=parameters.tile_height_mm,
-        top_z_mm=(
-            parameters.tile_height_mm
-            + parameters.shape_height_mm
+    """Build canonical OW01-OW04 raised geometric bosses.
+
+    All four use the same height and top-edge treatment. Primitive
+    identity comes only from plan geometry.
+    """
+
+    outline = shape_outline(parameters)
+
+    feature_height_mm = (
+        parameters.shape_height_mm
+    )
+
+    chamfer_mm = max(
+        0.6,
+        min(
+            feature_height_mm * 0.22,
+            parameters.shape_width_mm * 0.025,
         ),
+    )
+
+    return chamfered_extruded_polygon(
+        outline=outline,
+        bottom_z_mm=parameters.tile_height_mm,
+        height_mm=feature_height_mm,
+        chamfer_mm=chamfer_mm,
     )
 
 
 def build_slot_feature(
     parameters: TileParameters,
 ) -> MeshData:
-    """Create the shallow structural rim surrounding the dark slot."""
+    """Build canonical OW05 as a restrained capsule-shaped slot surround.
 
-    slot_length = parameters.shape_width_mm
+    The dark inset remains a separately finished component. The
+    canonical structural feature is a shallow capsule lip.
+    """
 
-    slot_width = max(
+    slot_length_mm = (
+        parameters.shape_width_mm
+    )
+
+    slot_width_mm = max(
         8.0,
         min(
-            parameters.shape_height_mm * 2.4,
-            slot_length * 0.30,
+            parameters.shape_width_mm * 0.22,
+            parameters.shape_height_mm * 2.6,
         ),
     )
 
-    rim_width = max(
-        1.5,
-        slot_width * 0.16,
+    lip_extra_mm = max(
+        1.8,
+        slot_width_mm * 0.15,
     )
 
-    rim_height = max(
-        0.8,
-        parameters.shape_height_mm * 0.18,
-    )
-
-    straight_length = max(
-        1.0,
-        slot_length - slot_width,
-    )
-
-    top_rail = transform_mesh(
-        rectangular_prism(
-            width_mm=straight_length,
-            depth_mm=rim_width,
-            height_mm=rim_height,
+    outer_outline = capsule_outline(
+        length_mm=(
+            slot_length_mm
+            + lip_extra_mm * 2.0
         ),
-        translate_y_mm=(
-            slot_width / 2.0
-            + rim_width / 2.0
+        width_mm=(
+            slot_width_mm
+            + lip_extra_mm * 2.0
         ),
-        translate_z_mm=parameters.tile_height_mm,
+        segments_per_end=max(
+            18,
+            parameters.circle_segments // 4,
+        ),
     )
 
-    bottom_rail = transform_mesh(
-        rectangular_prism(
-            width_mm=straight_length,
-            depth_mm=rim_width,
-            height_mm=rim_height,
-        ),
-        translate_y_mm=-(
-            slot_width / 2.0
-            + rim_width / 2.0
-        ),
-        translate_z_mm=parameters.tile_height_mm,
+    lip_height_mm = max(
+        0.9,
+        parameters.shape_height_mm * 0.20,
     )
 
-    end_radius = (
-        slot_width / 2.0
-        + rim_width
-    )
-
-    left_end = transform_mesh(
-        cylinder_mesh(
-            radius_mm=end_radius,
-            length_mm=rim_height,
-            segments=parameters.circle_segments,
+    return chamfered_extruded_polygon(
+        outline=outer_outline,
+        bottom_z_mm=parameters.tile_height_mm,
+        height_mm=lip_height_mm,
+        chamfer_mm=min(
+            0.45,
+            lip_height_mm * 0.35,
         ),
-        translate_x_mm=-straight_length / 2.0,
-        translate_z_mm=parameters.tile_height_mm,
-    )
-
-    right_end = transform_mesh(
-        cylinder_mesh(
-            radius_mm=end_radius,
-            length_mm=rim_height,
-            segments=parameters.circle_segments,
-        ),
-        translate_x_mm=straight_length / 2.0,
-        translate_z_mm=parameters.tile_height_mm,
-    )
-
-    return combine_meshes(
-        top_rail,
-        bottom_rail,
-        left_end,
-        right_end,
     )
 
 
 def build_hinge_feature(
     parameters: TileParameters,
 ) -> MeshData:
-    barrel_length = parameters.shape_width_mm
+    """Build canonical OW06 as a three-knuckle barrel hinge."""
 
-    barrel_radius = max(
-        2.5,
-        parameters.shape_height_mm / 2.0,
+    hinge_length_mm = (
+        parameters.shape_width_mm
     )
 
-    center_z = (
+    barrel_radius_mm = max(
+        3.2,
+        parameters.shape_height_mm * 0.72,
+    )
+
+    leaf_thickness_mm = max(
+        1.2,
+        parameters.shape_height_mm * 0.22,
+    )
+
+    leaf_width_mm = max(
+        10.0,
+        parameters.shape_width_mm * 0.22,
+    )
+
+    center_z_mm = (
         parameters.tile_height_mm
-        + barrel_radius
+        + barrel_radius_mm
     )
 
-    barrel = transform_mesh(
-        cylinder_mesh(
-            radius_mm=barrel_radius,
-            length_mm=barrel_length,
-            segments=parameters.circle_segments,
-            axis="Y",
-        ),
-        translate_z_mm=center_z,
+    gap_mm = max(
+        0.8,
+        barrel_radius_mm * 0.18,
     )
 
-    knuckle_length = barrel_length * 0.18
-    knuckle_radius = barrel_radius * 1.12
+    knuckle_length_mm = (
+        hinge_length_mm
+        - gap_mm * 2.0
+    ) / 3.0
 
     knuckles: list[MeshData] = []
 
-    for y_offset in (
-        -barrel_length * 0.32,
+    positions = (
+        -(
+            knuckle_length_mm
+            + gap_mm
+        ),
         0.0,
-        barrel_length * 0.32,
-    ):
+        (
+            knuckle_length_mm
+            + gap_mm
+        ),
+    )
+
+    for y_mm in positions:
         knuckles.append(
             transform_mesh(
                 cylinder_mesh(
-                    radius_mm=knuckle_radius,
-                    length_mm=knuckle_length,
-                    segments=parameters.circle_segments,
+                    radius_mm=barrel_radius_mm,
+                    length_mm=knuckle_length_mm,
+                    segments=max(
+                        48,
+                        parameters.circle_segments,
+                    ),
                     axis="Y",
                 ),
-                translate_y_mm=y_offset,
-                translate_z_mm=center_z,
+                translate_y_mm=y_mm,
+                translate_z_mm=center_z_mm,
             )
         )
 
     pin = transform_mesh(
         cylinder_mesh(
-            radius_mm=barrel_radius * 0.31,
-            length_mm=barrel_length * 1.08,
-            segments=parameters.circle_segments,
+            radius_mm=barrel_radius_mm * 0.30,
+            length_mm=hinge_length_mm * 1.06,
+            segments=max(
+                36,
+                parameters.circle_segments,
+            ),
             axis="Y",
         ),
-        translate_z_mm=center_z,
+        translate_z_mm=center_z_mm,
     )
 
-    leaf_width = barrel_radius * 2.0
-    leaf_depth = barrel_length * 0.72
-    leaf_height = max(
-        1.0,
-        parameters.shape_height_mm * 0.20,
-    )
+    leaf_depth_mm = hinge_length_mm * 0.84
 
     left_leaf = transform_mesh(
         rectangular_prism(
-            width_mm=leaf_width,
-            depth_mm=leaf_depth,
-            height_mm=leaf_height,
+            width_mm=leaf_width_mm,
+            depth_mm=leaf_depth_mm,
+            height_mm=leaf_thickness_mm,
         ),
         translate_x_mm=-(
-            barrel_radius
-            + leaf_width / 2.0
+            barrel_radius_mm
+            + leaf_width_mm / 2.0
         ),
         translate_z_mm=parameters.tile_height_mm,
     )
 
     right_leaf = transform_mesh(
         rectangular_prism(
-            width_mm=leaf_width,
-            depth_mm=leaf_depth,
-            height_mm=leaf_height,
+            width_mm=leaf_width_mm,
+            depth_mm=leaf_depth_mm,
+            height_mm=leaf_thickness_mm,
         ),
         translate_x_mm=(
-            barrel_radius
-            + leaf_width / 2.0
+            barrel_radius_mm
+            + leaf_width_mm / 2.0
         ),
         translate_z_mm=parameters.tile_height_mm,
     )
@@ -770,7 +1099,6 @@ def build_hinge_feature(
     return combine_meshes(
         left_leaf,
         right_leaf,
-        barrel,
         *knuckles,
         pin,
     )
@@ -779,61 +1107,78 @@ def build_hinge_feature(
 def build_fold_feature(
     parameters: TileParameters,
 ) -> MeshData:
-    panel_width = parameters.shape_width_mm
+    """Build canonical OW07 as a fixed sheet-like plane folded upward."""
 
-    panel_height = min(
-        parameters.tile_depth_mm * 0.56,
-        parameters.shape_width_mm,
+    fold_width_mm = (
+        parameters.shape_width_mm
     )
 
-    panel_thickness = max(
-        1.5,
-        parameters.shape_height_mm,
+    panel_depth_mm = min(
+        parameters.shape_width_mm * 0.70,
+        parameters.tile_depth_mm * 0.58,
     )
 
-    angle_degrees = 58.0
-    angle = math.radians(angle_degrees)
+    sheet_thickness_mm = max(
+        1.2,
+        parameters.shape_height_mm * 0.24,
+    )
+
+    angle_degrees = 52.0
+
+    anchor_depth_mm = max(
+        8.0,
+        panel_depth_mm * 0.22,
+    )
+
+    anchor = transform_mesh(
+        rectangular_prism(
+            width_mm=fold_width_mm,
+            depth_mm=anchor_depth_mm,
+            height_mm=sheet_thickness_mm,
+        ),
+        translate_y_mm=-(
+            anchor_depth_mm / 2.0
+        ),
+        translate_z_mm=parameters.tile_height_mm,
+    )
 
     panel = rectangular_prism(
-        width_mm=panel_width,
-        depth_mm=panel_thickness,
-        height_mm=panel_height,
+        width_mm=fold_width_mm,
+        depth_mm=sheet_thickness_mm,
+        height_mm=panel_depth_mm,
     )
 
     panel = transform_mesh(
         panel,
         rotate_x_degrees=angle_degrees,
-        translate_y_mm=(
-            math.sin(angle)
-            * panel_height
-            * 0.05
+        translate_y_mm=0.0,
+        translate_z_mm=(
+            parameters.tile_height_mm
+            + sheet_thickness_mm * 0.35
+        ),
+    )
+
+    crease = transform_mesh(
+        cylinder_mesh(
+            radius_mm=sheet_thickness_mm * 0.62,
+            length_mm=fold_width_mm,
+            segments=max(
+                32,
+                parameters.circle_segments // 2,
+            ),
+            axis="X",
         ),
         translate_z_mm=(
             parameters.tile_height_mm
-            + math.sin(angle)
-            * panel_thickness
-            / 2.0
+            + sheet_thickness_mm * 0.55
         ),
-    )
-
-    foot = transform_mesh(
-        rectangular_prism(
-            width_mm=panel_width * 1.05,
-            depth_mm=panel_thickness * 2.2,
-            height_mm=max(
-                1.3,
-                panel_thickness * 0.50,
-            ),
-        ),
-        translate_y_mm=-panel_thickness * 0.40,
-        translate_z_mm=parameters.tile_height_mm,
     )
 
     return combine_meshes(
-        foot,
+        anchor,
         panel,
+        crease,
     )
-
 
 def square_circle_ring_mesh(
     *,
@@ -917,10 +1262,11 @@ def square_circle_ring_mesh(
     return result
 
 
+
 def build_aperture_feature(
     parameters: TileParameters,
 ) -> MeshData:
-    """Create a square tile with a circular aperture through it."""
+    """Build canonical OW08 as a through-hole in the base substrate."""
 
     hole_radius = parameters.shape_width_mm / 2.0
 
@@ -950,8 +1296,6 @@ def build_aperture_feature(
         height_mm=parameters.tile_height_mm,
         segments=parameters.circle_segments,
     )
-
-
 
 def build_water_droplet_feature(
     parameters: TileParameters,
@@ -1183,37 +1527,43 @@ def build_weight_feature(
         translate_z_mm=parameters.tile_height_mm,
     )
 
+
 def build_threshold_feature(
     parameters: TileParameters,
 ) -> MeshData:
-    length = min(
-        parameters.shape_width_mm,
-        parameters.tile_width_mm * 0.86,
+    """Build canonical OW13 as a low chamfered boundary bar."""
+
+    length_mm = min(
+        parameters.shape_width_mm * 1.10,
+        parameters.tile_width_mm * 0.78,
     )
 
-    depth = max(
-        5.0,
-        min(
-            parameters.shape_height_mm * 2.0,
-            parameters.tile_depth_mm * 0.20,
+    depth_mm = max(
+        8.0,
+        parameters.shape_width_mm * 0.17,
+    )
+
+    height_mm = max(
+        2.4,
+        parameters.shape_height_mm * 0.65,
+    )
+
+    outline = (
+        (-length_mm / 2.0, -depth_mm / 2.0),
+        (length_mm / 2.0, -depth_mm / 2.0),
+        (length_mm / 2.0, depth_mm / 2.0),
+        (-length_mm / 2.0, depth_mm / 2.0),
+    )
+
+    return chamfered_extruded_polygon(
+        outline=outline,
+        bottom_z_mm=parameters.tile_height_mm,
+        height_mm=height_mm,
+        chamfer_mm=min(
+            1.2,
+            height_mm * 0.28,
         ),
     )
-
-    height = max(
-        2.0,
-        parameters.shape_height_mm,
-    )
-
-    return transform_mesh(
-        rectangular_prism(
-            width_mm=length,
-            depth_mm=depth,
-            height_mm=height,
-        ),
-        translate_z_mm=parameters.tile_height_mm,
-    )
-
-
 
 def build_sensor_feature(
     parameters: TileParameters,
@@ -1288,79 +1638,125 @@ def build_sensor_feature(
         dome,
     )
 
+
 def build_handle_feature(
     parameters: TileParameters,
 ) -> MeshData:
-    span = parameters.shape_width_mm
+    """Build canonical OW15 as a simple rounded bridge handle."""
 
-    post_width = max(
-        4.0,
-        min(
-            parameters.shape_height_mm,
-            span * 0.14,
-        ),
+    total_width_mm = (
+        parameters.shape_width_mm
     )
 
-    post_depth = max(
-        5.0,
-        post_width * 1.2,
+    post_radius_mm = max(
+        2.6,
+        parameters.shape_height_mm * 0.55,
     )
 
-    post_height = max(
+    clearance_mm = max(
         12.0,
-        parameters.shape_height_mm * 3.0,
+        parameters.shape_height_mm * 2.8,
     )
 
-    offset = (
-        span / 2.0
-        - post_width / 2.0
+    support_offset_mm = (
+        total_width_mm / 2.0
+        - post_radius_mm * 1.5
+    )
+
+    post_height_mm = (
+        clearance_mm
+        + post_radius_mm
     )
 
     left_post = transform_mesh(
-        rectangular_prism(
-            width_mm=post_width,
-            depth_mm=post_depth,
-            height_mm=post_height,
+        cylinder_mesh(
+            radius_mm=post_radius_mm,
+            length_mm=post_height_mm,
+            segments=max(
+                48,
+                parameters.circle_segments,
+            ),
+            axis="Z",
         ),
-        translate_x_mm=-offset,
+        translate_x_mm=-support_offset_mm,
         translate_z_mm=parameters.tile_height_mm,
     )
 
     right_post = transform_mesh(
-        rectangular_prism(
-            width_mm=post_width,
-            depth_mm=post_depth,
-            height_mm=post_height,
+        cylinder_mesh(
+            radius_mm=post_radius_mm,
+            length_mm=post_height_mm,
+            segments=max(
+                48,
+                parameters.circle_segments,
+            ),
+            axis="Z",
         ),
-        translate_x_mm=offset,
+        translate_x_mm=support_offset_mm,
         translate_z_mm=parameters.tile_height_mm,
     )
 
+    grip_length_mm = (
+        support_offset_mm * 2.0
+    )
+
     grip = transform_mesh(
-        rectangular_prism(
-            width_mm=span,
-            depth_mm=post_depth,
-            height_mm=max(
-                4.0,
-                post_width,
+        cylinder_mesh(
+            radius_mm=post_radius_mm,
+            length_mm=grip_length_mm,
+            segments=max(
+                48,
+                parameters.circle_segments,
             ),
+            axis="X",
         ),
         translate_z_mm=(
             parameters.tile_height_mm
-            + post_height
+            + post_height_mm
         ),
     )
 
+    left_foot = transform_mesh(
+        cylinder_mesh(
+            radius_mm=post_radius_mm * 1.45,
+            length_mm=max(
+                1.2,
+                post_radius_mm * 0.48,
+            ),
+            segments=max(
+                48,
+                parameters.circle_segments,
+            ),
+            axis="Z",
+        ),
+        translate_x_mm=-support_offset_mm,
+        translate_z_mm=parameters.tile_height_mm,
+    )
+
+    right_foot = transform_mesh(
+        cylinder_mesh(
+            radius_mm=post_radius_mm * 1.45,
+            length_mm=max(
+                1.2,
+                post_radius_mm * 0.48,
+            ),
+            segments=max(
+                48,
+                parameters.circle_segments,
+            ),
+            axis="Z",
+        ),
+        translate_x_mm=support_offset_mm,
+        translate_z_mm=parameters.tile_height_mm,
+    )
+
     return combine_meshes(
+        left_foot,
+        right_foot,
         left_post,
         right_post,
         grip,
     )
-
-
-# =====================================================================
-# Feature dispatch
-# =====================================================================
 
 def build_feature_mesh(
     parameters: TileParameters,
