@@ -1,0 +1,30 @@
+OWDE FABRICATION BATCH 03 — COMPETITION PRIMITIVES
+
+OWDE release: 0.7.0-alpha.1
+
+Material requested: white PLA
+Reference field: 20 × 16 inches
+
+VALIDATION POLICY
+- non-empty mesh
+- zero non-manifold edges
+- zero degenerate faces
+- exactly one connected component
+- expected canonical dimensions
+- bottom approximately Z = 0
+- STL re-import validation
+
+Voxel fabrication-union resolution: 0.200 mm
+Dimension tolerance after fabrication cleanup: ±0.600 mm
+
+RESULTS
+
+COMP-0001_Actor_Circle_A.stl: PASS | 130 verts | 256 faces | 1 component | 0 non-manifold edges | 0 degenerate faces | 31.750 × 31.750 × 9.525 mm | bottom Z 0.000 mm
+COMP-0001_Actor_Circle_B.stl: PASS | 130 verts | 256 faces | 1 component | 0 non-manifold edges | 0 degenerate faces | 31.750 × 31.750 × 9.525 mm | bottom Z 0.000 mm
+COMP-0001_Actor_Square.stl: PASS | 8 verts | 12 faces | 1 component | 0 non-manifold edges | 0 degenerate faces | 31.750 × 31.750 × 9.525 mm | bottom Z 0.000 mm
+COMP-0002_Gate.stl: PASS | 225772 verts | 451540 faces | 1 component | 0 non-manifold edges | 0 degenerate faces | 152.400 × 12.700 × 38.100 mm | bottom Z -0.000 mm
+COMP-0003_Net_A.stl: PASS | 694636 verts | 1389524 faces | 1 component | 0 non-manifold edges | 0 degenerate faces | 152.400 × 8.890 × 63.500 mm | bottom Z -0.000 mm
+COMP-0003_Net_B.stl: PASS | 694636 verts | 1389524 faces | 1 component | 0 non-manifold edges | 0 degenerate faces | 152.400 × 8.890 × 63.500 mm | bottom Z -0.000 mm
+
+OVERALL RESULT
+PASS — fabrication package generated.

@@ -1,0 +1,1010 @@
+"""
+Operational Worlds Design Engine
+Fabrication Batch 03 — Competition Primitives
+
+Exports:
+
+    COMP-0001 Actor Circle A
+    COMP-0001 Actor Circle B
+    COMP-0001 Actor Square
+    COMP-0002 Gate
+    COMP-0003 Net A
+    COMP-0003 Net B
+
+Competition primitives are substrate-free.
+
+The canonical geometry comes from:
+
+    owde_addon/core/competition_builders.py
+
+Fabrication pipeline:
+
+    canonical MeshData
+        ↓
+    Blender mesh in millimetres
+        ↓
+    voxel-remesh / cleanup
+        ↓
+    manifold + connected-component validation
+        ↓
+    STL export
+        ↓
+    STL re-import
+        ↓
+    second validation
+        ↓
+    README + validation report
+        ↓
+    printer ZIP
+
+Run with Blender, for example:
+
+    blender --background \
+      --python scripts/export_fabrication_batch_03_competition.py
+
+Or from Blender's Python environment.
+"""
+
+from __future__ import annotations
+
+import math
+import shutil
+import sys
+import zipfile
+from pathlib import Path
+
+import bpy
+import bmesh
+
+
+# ============================================================
+# REPOSITORY IMPORT
+# ============================================================
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+
+from owde_addon.core.competition_builders import (  # noqa: E402
+    ACTOR_DIAMETER_MM,
+    ACTOR_HEIGHT_MM,
+    ACTOR_SQUARE_MM,
+    GATE_DEPTH_MM,
+    GATE_HEIGHT_MM,
+    GATE_LENGTH_MM,
+    GATE_MEMBER_MM,
+    NET_DEPTH_MM,
+    NET_FRAME_MM,
+    NET_GRID_MEMBER_MM,
+    NET_HEIGHT_MM,
+    NET_LENGTH_MM,
+    build_actor_mesh,
+    build_gate_mesh,
+    build_net_mesh,
+)
+
+
+# ============================================================
+# RELEASE
+# ============================================================
+
+OWDE_VERSION = "0.7.0-alpha.1"
+BATCH_NAME = "OWDE_Fabrication_Batch_03_Competition"
+
+OUTPUT_ROOT = (
+    REPO_ROOT
+    / "exports"
+    / "fabrication_batch_03_competition"
+)
+
+PACKAGE_DIRECTORY = OUTPUT_ROOT / BATCH_NAME
+STL_DIRECTORY = PACKAGE_DIRECTORY / "stl"
+
+ZIP_PATH = OUTPUT_ROOT / f"{BATCH_NAME}.zip"
+
+README_PATH = PACKAGE_DIRECTORY / "README_FOR_PRINTER.txt"
+REPORT_PATH = PACKAGE_DIRECTORY / "VALIDATION_REPORT.txt"
+
+
+# ============================================================
+# FABRICATION POLICY
+# ============================================================
+
+# Geometry is authored directly in millimetres.
+#
+# STL itself is unitless, so raw STL coordinates are emitted in mm.
+#
+# This avoids relying on Blender scene-unit conversion.
+
+EXPECTED_TOLERANCE_MM = 0.60
+
+DEGENERATE_AREA_EPSILON = 1e-7
+
+# Voxel remesh is used to turn the overlapping / touching component
+# geometry into one watertight physical body.
+#
+# 0.20 mm is intentionally much smaller than the smallest current
+# competition-grid members.
+VOXEL_SIZE_MM = 0.20
+
+# Prevent tiny remesh artifacts while preserving current dimensions.
+VOXEL_ADAPTIVITY = 0.0
+
+
+# ============================================================
+# CANONICAL BATCH
+# ============================================================
+
+BATCH = (
+    {
+        "filename": "COMP-0001_Actor_Circle_A.stl",
+        "id": "COMP-0001",
+        "name": "Actor",
+        "variant": "Circle A",
+        "quantity": 1,
+        "expected": (
+            ACTOR_DIAMETER_MM,
+            ACTOR_DIAMETER_MM,
+            ACTOR_HEIGHT_MM,
+        ),
+        "builder": lambda: build_actor_mesh("CIRCLE"),
+    },
+    {
+        "filename": "COMP-0001_Actor_Circle_B.stl",
+        "id": "COMP-0001",
+        "name": "Actor",
+        "variant": "Circle B",
+        "quantity": 1,
+        "expected": (
+            ACTOR_DIAMETER_MM,
+            ACTOR_DIAMETER_MM,
+            ACTOR_HEIGHT_MM,
+        ),
+        "builder": lambda: build_actor_mesh("CIRCLE"),
+    },
+    {
+        "filename": "COMP-0001_Actor_Square.stl",
+        "id": "COMP-0001",
+        "name": "Actor",
+        "variant": "Square",
+        "quantity": 1,
+        "expected": (
+            ACTOR_SQUARE_MM,
+            ACTOR_SQUARE_MM,
+            ACTOR_HEIGHT_MM,
+        ),
+        "builder": lambda: build_actor_mesh("SQUARE"),
+    },
+    {
+        "filename": "COMP-0002_Gate.stl",
+        "id": "COMP-0002",
+        "name": "Gate",
+        "variant": "Canonical",
+        "quantity": 1,
+        "expected": (
+            GATE_LENGTH_MM,
+            GATE_DEPTH_MM,
+            GATE_HEIGHT_MM,
+        ),
+        "builder": lambda: build_gate_mesh(),
+    },
+    {
+        "filename": "COMP-0003_Net_A.stl",
+        "id": "COMP-0003",
+        "name": "Net",
+        "variant": "Canonical A",
+        "quantity": 1,
+        "expected": (
+            NET_LENGTH_MM,
+            NET_DEPTH_MM,
+            NET_HEIGHT_MM,
+        ),
+        "builder": lambda: build_net_mesh(
+            top_mesh=True,
+            woven_depth=True,
+        ),
+    },
+    {
+        "filename": "COMP-0003_Net_B.stl",
+        "id": "COMP-0003",
+        "name": "Net",
+        "variant": "Canonical B",
+        "quantity": 1,
+        "expected": (
+            NET_LENGTH_MM,
+            NET_DEPTH_MM,
+            NET_HEIGHT_MM,
+        ),
+        "builder": lambda: build_net_mesh(
+            top_mesh=True,
+            woven_depth=True,
+        ),
+    },
+)
+
+
+# ============================================================
+# SCENE HELPERS
+# ============================================================
+
+def clear_scene():
+    bpy.ops.object.select_all(action="SELECT")
+    bpy.ops.object.delete(use_global=False)
+
+    for mesh in list(bpy.data.meshes):
+        if mesh.users == 0:
+            bpy.data.meshes.remove(mesh)
+
+
+def deselect_all():
+    bpy.ops.object.select_all(action="DESELECT")
+
+
+def activate(obj):
+    deselect_all()
+    obj.select_set(True)
+    bpy.context.view_layer.objects.active = obj
+
+
+def create_blender_object_mm(mesh_data, name):
+    """
+    Create the Blender mesh using the MeshData coordinates literally.
+
+    MeshData is authored in millimetres, therefore:
+
+        Blender coordinate 152.4
+            =
+        STL coordinate 152.4
+            =
+        printer interprets 152.4 mm
+    """
+
+    mesh = bpy.data.meshes.new(f"{name}_Mesh")
+
+    mesh.from_pydata(
+        list(mesh_data.vertices),
+        [],
+        list(mesh_data.faces),
+    )
+
+    mesh.validate(verbose=False)
+    mesh.update()
+
+    obj = bpy.data.objects.new(name, mesh)
+    bpy.context.collection.objects.link(obj)
+
+    return obj
+
+
+# ============================================================
+# FABRICATION CLEANUP
+# ============================================================
+
+def remove_loose_and_degenerate(obj):
+    mesh = obj.data
+
+    bm = bmesh.new()
+    bm.from_mesh(mesh)
+
+    # Merge extremely close duplicates.
+    if bm.verts:
+        bmesh.ops.remove_doubles(
+            bm,
+            verts=list(bm.verts),
+            dist=1e-6,
+        )
+
+    # Remove zero-area / zero-length geometry.
+    bmesh.ops.dissolve_degenerate(
+        bm,
+        dist=1e-6,
+        edges=list(bm.edges),
+    )
+
+    loose_edges = [
+        edge
+        for edge in bm.edges
+        if len(edge.link_faces) == 0
+    ]
+
+    if loose_edges:
+        bmesh.ops.delete(
+            bm,
+            geom=loose_edges,
+            context="EDGES",
+        )
+
+    loose_verts = [
+        vert
+        for vert in bm.verts
+        if len(vert.link_edges) == 0
+    ]
+
+    if loose_verts:
+        bmesh.ops.delete(
+            bm,
+            geom=loose_verts,
+            context="VERTS",
+        )
+
+    if bm.faces:
+        bmesh.ops.recalc_face_normals(
+            bm,
+            faces=list(bm.faces),
+        )
+
+    bm.to_mesh(mesh)
+    bm.free()
+
+    mesh.validate(verbose=False)
+    mesh.update()
+
+
+def voxel_unify(obj):
+    """
+    Convert overlapping and touching shells into one physical body.
+
+    This is particularly important for:
+
+        Gate
+        Net frame
+        vertical net lattice
+        horizontal net lattice
+        top-view net grille
+    """
+
+    activate(obj)
+
+    obj.data.remesh_voxel_size = VOXEL_SIZE_MM
+    obj.data.remesh_voxel_adaptivity = VOXEL_ADAPTIVITY
+
+    bpy.ops.object.voxel_remesh()
+
+    remove_loose_and_degenerate(obj)
+
+
+def cleanup_fabrication_mesh(obj):
+    remove_loose_and_degenerate(obj)
+
+    # Actor meshes are already single solids.
+    #
+    # Gate and Net contain assembled members that need fabrication
+    # unification.
+    if obj.get("owde_requires_union", False):
+        voxel_unify(obj)
+
+    remove_loose_and_degenerate(obj)
+
+
+# ============================================================
+# VALIDATION
+# ============================================================
+
+def mesh_bounds(obj):
+    xs = [vertex.co.x for vertex in obj.data.vertices]
+    ys = [vertex.co.y for vertex in obj.data.vertices]
+    zs = [vertex.co.z for vertex in obj.data.vertices]
+
+    if not xs:
+        return (0.0, 0.0, 0.0)
+
+    return (
+        max(xs) - min(xs),
+        max(ys) - min(ys),
+        max(zs) - min(zs),
+    )
+
+
+def bottom_z(obj):
+    if not obj.data.vertices:
+        return 0.0
+
+    return min(vertex.co.z for vertex in obj.data.vertices)
+
+
+def connected_component_count(obj):
+    mesh = obj.data
+
+    if not mesh.vertices:
+        return 0
+
+    adjacency = {
+        vertex.index: set()
+        for vertex in mesh.vertices
+    }
+
+    for edge in mesh.edges:
+        a, b = edge.vertices
+        adjacency[a].add(b)
+        adjacency[b].add(a)
+
+    unseen = set(adjacency.keys())
+    components = 0
+
+    while unseen:
+        components += 1
+
+        start = unseen.pop()
+        stack = [start]
+
+        while stack:
+            current = stack.pop()
+
+            for neighbour in adjacency[current]:
+                if neighbour in unseen:
+                    unseen.remove(neighbour)
+                    stack.append(neighbour)
+
+    return components
+
+
+def non_manifold_edge_count(obj):
+    bm = bmesh.new()
+    bm.from_mesh(obj.data)
+
+    count = sum(
+        1
+        for edge in bm.edges
+        if not edge.is_manifold
+    )
+
+    bm.free()
+    return count
+
+
+def degenerate_face_count(obj):
+    count = 0
+
+    for polygon in obj.data.polygons:
+        if polygon.area <= DEGENERATE_AREA_EPSILON:
+            count += 1
+
+    return count
+
+
+def validate_dimensions(actual, expected):
+    issues = []
+
+    labels = ("X", "Y", "Z")
+
+    for label, observed, target in zip(
+        labels,
+        actual,
+        expected,
+    ):
+        delta = abs(observed - target)
+
+        if delta > EXPECTED_TOLERANCE_MM:
+            issues.append(
+                f"{label} dimension {observed:.3f} mm "
+                f"differs from expected {target:.3f} mm "
+                f"by {delta:.3f} mm"
+            )
+
+    return issues
+
+
+def validate_object(obj, expected):
+    issues = []
+
+    vertex_count = len(obj.data.vertices)
+    face_count = len(obj.data.polygons)
+
+    if vertex_count == 0:
+        issues.append("mesh has zero vertices")
+
+    if face_count == 0:
+        issues.append("mesh has zero faces")
+
+    non_manifold = non_manifold_edge_count(obj)
+
+    if non_manifold != 0:
+        issues.append(
+            f"{non_manifold} non-manifold edges"
+        )
+
+    components = connected_component_count(obj)
+
+    if components != 1:
+        issues.append(
+            f"{components} connected components; expected 1"
+        )
+
+    degenerates = degenerate_face_count(obj)
+
+    if degenerates != 0:
+        issues.append(
+            f"{degenerates} degenerate faces"
+        )
+
+    bounds = mesh_bounds(obj)
+
+    issues.extend(
+        validate_dimensions(
+            bounds,
+            expected,
+        )
+    )
+
+    minimum_z = bottom_z(obj)
+
+    if abs(minimum_z) > EXPECTED_TOLERANCE_MM:
+        issues.append(
+            f"bottom Z is {minimum_z:.3f} mm; expected approximately 0"
+        )
+
+    return {
+        "pass": not issues,
+        "issues": issues,
+        "vertices": vertex_count,
+        "faces": face_count,
+        "components": components,
+        "non_manifold": non_manifold,
+        "degenerate_faces": degenerates,
+        "bounds": bounds,
+        "bottom_z": minimum_z,
+    }
+
+
+# ============================================================
+# STL EXPORT / IMPORT
+# ============================================================
+
+def export_stl(obj, filepath):
+    filepath = str(filepath)
+
+    activate(obj)
+
+    # Blender 4.x / 5.x
+    if hasattr(bpy.ops.wm, "stl_export"):
+        bpy.ops.wm.stl_export(
+            filepath=filepath,
+            export_selected_objects=True,
+            global_scale=1.0,
+        )
+        return
+
+    # Older Blender fallback.
+    if hasattr(bpy.ops.export_mesh, "stl"):
+        bpy.ops.export_mesh.stl(
+            filepath=filepath,
+            use_selection=True,
+            global_scale=1.0,
+            ascii=False,
+        )
+        return
+
+    raise RuntimeError(
+        "No Blender STL export operator is available."
+    )
+
+
+def import_stl(filepath):
+    clear_scene()
+
+    filepath = str(filepath)
+
+    # Blender 4.x / 5.x
+    if hasattr(bpy.ops.wm, "stl_import"):
+        bpy.ops.wm.stl_import(
+            filepath=filepath,
+            global_scale=1.0,
+        )
+
+    elif hasattr(bpy.ops.import_mesh, "stl"):
+        bpy.ops.import_mesh.stl(
+            filepath=filepath,
+            global_scale=1.0,
+        )
+
+    else:
+        raise RuntimeError(
+            "No Blender STL import operator is available."
+        )
+
+    imported = list(bpy.context.selected_objects)
+
+    if len(imported) != 1:
+        raise RuntimeError(
+            f"Expected one object after STL re-import, "
+            f"found {len(imported)}."
+        )
+
+    return imported[0]
+
+
+# ============================================================
+# OUTPUT TEXT
+# ============================================================
+
+def inches(mm):
+    return mm / 25.4
+
+
+def format_dimensions(dimensions):
+    x, y, z = dimensions
+    return f"{x:.3f} × {y:.3f} × {z:.3f} mm"
+
+
+def create_readme():
+    text = f"""Operational Worlds — Fabrication Batch 03
+Competition Primitives
+
+OWDE release:
+{OWDE_VERSION}
+
+MATERIAL REQUESTED
+White PLA
+
+QUANTITY
+6 physical objects total
+
+CONTENTS
+2 × COMP-0001 Actor — Circular
+1 × COMP-0001 Actor — Square
+1 × COMP-0002 Gate
+2 × COMP-0003 Net
+
+REFERENCE FIELD
+20 × 16 inches
+
+CANONICAL DIMENSIONS
+
+Actor — circ{ACTOR_DIAMETER_MM:.3f} mm
+         {inches(ACTOR_DIAMETER_MM):.3f} in
+Height:   {ACTOR_HEIGHT_MM:.3f} mm
+         {inches(ACTOR_HEIGHT_MM):.3f} in
+
+Actor — square
+Width:  {ACTOR_SQUARE_MM:.3f} mm
+        {inches(ACTOR_SQUARE_MM):.3f} in
+Height: {ACTOR_HEIGHT_MM:.3f} mm
+        {inches(ACTOR_HEIGHT_MM):.3f} in
+
+Gate
+Length: {GATE_LENGTH_MM:.3f} mm
+        {inches(GATE_LENGTH_MM):.3f} in
+Height: {GATE_HEIGHT_MM:.3f} mm
+        {inches(GATE_HEIGHT_MM):.3f} in
+Depth:  {GATE_DEPTH_MM:.3f} mm
+        {inches(GATE_DEPTH_MM):.3f} in
+
+Net
+Length: {NET_LENGTH_MM:.3f} mm
+        {inches(NET_LENGTH_MM):.3f} in
+Height: {NET_HEIGHT_MM:.3f} mm
+        {inches(NET_HEIGHT_MM):.3f} in
+Depth:  {NET_DEPTH_MM:.3f} mm
+        {inches(NET_DEPTH_MM):.3f} in
+
+FABRICATION NOTES
+
+- All STL coordinates are millimetres.
+- Please do not rescale the files.
+- Competition primitives intentionally do not include a substrate/base tile.
+- Each STL is exported as one unified physical object.
+- Gate and Net geometry has been fabrication-unifd.
+- COMP-0003 Net contains an open vertical lattice and an open top/plan-view grille.
+- The Net is designed to remain visibly net-like from both level and overhead views.
+
+IMPORTANT NET FEATURE NOTE
+
+The current Net includes relatively fine lattice members.
+Please confirm that the selected PLA process/nozzle can reliably print
+the smallest members before fabrication.
+
+The geometric validation report is included separately.
+
+Operational Worlds Research Program
+OWDE — Operational Worlds Design Engine
+"""
+
+    README_PATH.write_text(
+        text,
+        encoding="utf-8",
+    )
+
+
+def report_line(item, result):
+    bounds = result["bounds"]
+
+    status = (
+        "PASS"
+        if result["pass"]
+        else "FAIL"
+    )
+
+    line = (
+        f'{item["filename"]}: {status}'
+        f' | {result["vertices"]} verts'
+        f' | {result["faces"]} faces'
+        f' | {result["components"]} component'
+        f'{"s" if result["components"] != 1 else ""}'
+        f' | {result["non_manifold"]} non-manifold edges'
+        f' | {result["degenerate_faces"]} degenerate faces'
+        f' | {bounds[0]:.3f} × {bounds[1]:.3f} × {bounds[2]:.3f} mm'
+        f' | bottom Z {result["bottom_z"]:.3f} mm'
+    )
+
+    if result["issues"]:
+        line += "\n"
+
+        for issue in result["issues"]:
+            line += f"    - {issue}\n"
+
+        return line.rstrip()
+
+    return line
+
+
+def create_validation_report(results):
+    lines = [
+        "OWDE FABRICATION BATCH 03 — COMPETITION PRIMITIVES",
+        "",
+        f"OWDE release: {OWDE_VERSION}",
+        "",
+        "Material requested: white PLA",
+        "Reference field: 20 × 16 inches",
+        "",
+        "VALIDATION POLICY",
+        "- non-empty mesh",
+        "- zero non-manifold edges",
+        "- zero degenerate faces",
+        "- exactly one connected component",
+        "- expected canonical dimensions",
+        "- bottom approximately Z = 0",
+        "- STL re-import validation",
+        "",
+        f"Voxel fabrication-union resolution: {VOXEL_SIZE_MM:.3f} mm",
+   f"Dimension tolerance after fabrication cleanup: ±{EXPECTED_TOLERANCE_MM:.3f} mm",
+        "",
+        "RESULTS",
+        "",
+    ]
+
+    for item, result in results:
+        lines.append(
+            report_line(
+                item,
+                result,
+            )
+        )
+
+    lines.extend([
+        "",
+        "OVERALL RESULT",
+        (
+            "PASS — fabrication package generated."
+            if all(result["pass"] for _, result in results)
+            else "FAIL — fabrication ZIP was not approved."
+        ),
+        "",
+    ])
+
+    REPORT_PATH.write_text(
+        "\n".join(lines),
+        encoding="utf-8",
+    )
+
+
+# ============================================================
+# PACKAGE
+# ============================================================
+
+def prepare_directories():
+    if PACKAGE_DIRECTORY.exists():
+        shutil.rmtree(PACKAGE_DIRECTORY)
+
+    STL_DIRECTORY.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    if ZIP_PATH.exists():
+        ZIP_PATH.unlink()
+
+
+def zip_package():
+    with zipfile.ZipFile(
+        ZIP_PATH,
+        "w",
+        compression=zipfile.ZIP_DEFLATED,
+    ) as archive:
+
+        for path in sorted(
+            PACKAGE_DIRECTORY.rglob("*")
+        ):
+            if path.is_file():
+
+                archive.write(
+                    path,
+                    path.relative_to(
+                        PACKAGE_DIRECTORY.parent
+                    ),
+                )
+
+
+# ============================================================
+# EXPORT ONE
+# ============================================================
+
+def build_fabrication_object(item):
+    clear_scene()
+
+    mesh_data = item["builder"]()
+
+    object_name = (
+        Path(item["filename"]).stem
+    )
+
+    obj = create_blender_object_mm(
+        mesh_data,
+        object_name,
+    )
+
+    obj["owde_id"] = item["id"]
+    obj["owde_name"] = item["name"]
+    obj["owde_variant"] = item["variant"]
+    obj["owde_release"] = OWDE_VERSION
+
+    obj["owde_requires_union"] = (
+        item["id"]
+        in {
+            "COMP-0002",
+            "COMP-0003",
+        }
+    )
+
+    cleanup_fabrication_mesh(obj)
+
+    return obj
+
+
+def export_and_validate(item):
+    filepath = (
+        STL_DIRECTORY
+        / item["filename"]
+    )
+
+    print()
+    print("=" * 72)
+    print(f'BUILDING {item["filename"]}')
+    print("=" * 72)
+
+    obj = build_fabrication_object(item)
+
+    pre_export = validate_object(
+        obj,
+        item["expected"],
+    )
+
+    if not pre_export["pass"]:
+        print("PRE-EXPORT VALIDATION FAILED")
+
+        for issue in pre_export["issues"]:
+            print(f"  - {issue}")
+
+        return pre_export
+
+    export_stl(
+        obj,
+        filepath,
+    )
+
+    # --------------------------------------------------------
+    # IMPORTANT:
+    # Validate what actually exists in the STL, not merely the
+    # Blender source object.
+    # --------------------------------------------------------
+
+    imported = import_stl(
+        filepath,
+    )
+
+    post_export = validate_object(
+        imported,
+        item["expected"],
+    )
+
+    if post_export["pass"]:
+        print(
+            f'PASS: {item["filename"]}'
+        )
+
+    else:
+        print(
+            f'FAIL: {item["filename"]}'
+        )
+
+        for issue in post_export["issues"]:
+            print(f"  - {issue}")
+
+    return post_export
+
+
+# ============================================================
+# MAIN
+# ============================================================
+
+def main():
+    print()
+    print("=" * 72)
+    print("OPERATIONAL WORLDS")
+    print("FABRICATION BATCH 03 — COMPETITION PRIMITIVES")
+    print("=" * 72)
+    print()
+    print(f"OWDE release: {OWDE_VERSION}")
+    print(f"Output: {PACKAGE_DIRECTORY}")
+    print()
+
+    prepare_directories()
+
+    results = []
+
+    for item in BATCH:
+
+        result = export_and_validate(
+            item,
+        )
+
+        results.append(
+            (
+                item,
+                result,
+            )
+        )
+
+    create_readme()
+    create_validation_report(
+        results,
+    )
+    failed = [
+        item["filename"]
+        for item, result in results
+        if not result["pass"]
+    ]
+
+    print()
+    print("=" * 72)
+
+    if failed:
+        print("FABRICATION BATCH 03 FAILED VALIDATION")
+        print()
+        print("ZIP NOT CREATED.")
+        print()
+        print("Failed:")
+
+        for filename in failed:
+            print(f"  - {filename}")
+
+        print()
+        print(
+            f"See validation report:\n"
+            f"{REPORT_PATH}"
+        )
+
+        raise SystemExit(1)
+
+    zip_package()
+
+    print("FABRICATION BATCH 03 PASSED")
+    print()
+    print("Printer package:")
+    print(ZIP_PATH)
+    print()
+    print("All six STL files passed:")
+    print("  ✓ non-empty")
+    print("  ✓ one connected component")
+    print("  ✓ zero non-manifold edges")
+    print("  ✓ zero degenerate faces")
+    print("  ✓ canonical dimensions")
+    print("  ✓ STL re-import validation")
+    print()
+    print("READY FOR MANUAL REVIEW BEFORE SENDING TO PRINTER.")
+    print("=" * 72)
+
+
+if __name__ == "__main__":
+    main()

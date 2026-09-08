@@ -1,0 +1,1 @@
+OWDE Competition Primitives v0.1 / 0.7.0-alpha.1\n\nRun install_competition_primitives.sh from the OWDE repository root.\nIt creates the core builders, Blender UI/operator, standalone scene script,\ntests, patches addon registration/version, makes a backup, and runs tests.\n
