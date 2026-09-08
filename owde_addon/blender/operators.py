@@ -8,7 +8,7 @@ from .adapter import create_blender_object
 
 MM_TO_METERS = 0.001
 GALLERY_COLLECTION_NAME = "OWDE Primitive Gallery"
-OWDE_VERSION = "0.6.0-alpha.5"
+OWDE_VERSION = "0.7.0-alpha.1"
 
 GALLERY_SHAPES = (
     ShapeType.CIRCLE,
