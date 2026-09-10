@@ -1,0 +1,461 @@
+python3 <<'PY'
+from pathlib import Path
+import re
+import textwrap
+
+repo = Path(".")
+builders_path = repo / "owde_addon" / "core" / "field_builders.py"
+fields_path = repo / "owde_addon" / "blender" / "fields.py"
+operators_path = repo / "owde_addon" / "blender" / "operators.py"
+build_path = repo / "scripts" / "build_addon.py"
+tests_path = repo / "tests" / "test_field_builders.py"
+
+for path in (builders_path, fields_path):
+    if not path.exists():
+        raise SystemExit(
+            f"Missing required file: {path}\n"
+            "Run this from the OWDE repository root."
+        )
+
+builders_text = builders_path.read_text(encoding="utf-8")
+fields_text = fields_path.read_text(encoding="utf-8")
+
+builders_backup = builders_path.with_suffix(".py.before-field-batch02")
+fields_backup = fields_path.with_suffix(".py.before-field-batch02")
+
+builders_backup.write_text(builders_text, encoding="utf-8")
+fields_backup.write_text(fields_text, encoding="utf-8")
+
+# ============================================================
+# 1. ADD SECOND-BATCH CORE BUILDERS
+# ============================================================
+
+if "def build_nested_zones_field(" not in builders_text:
+
+    block = textwrap.dedent(
+        '''
+
+        def build_nested_zones_field(
+            *,
+            field_width_mm: float = DEFAULT_FIELD_WIDTH_MM,
+            field_height_mm: float = DEFAULT_FIELD_HEIGHT_MM,
+            line_width_mm: float = DEFAULT_LINE_WIDTH_MM,
+            outer_width_mm: float = 220.0,
+            outer_height_mm: float = 310.0,
+            inner_width_mm: float = 120.0,
+            inner_height_mm: float = 190.0,
+        ) -> FieldSpec:
+            """FIELD-0005 — Nested Zones
+
+            Two centered rectangular boundaries establish an outer and inner zone.
+            """
+
+            half_outer_w = outer_width_mm / 2.0
+            half_outer_h = outer_height_mm / 2.0
+
+            half_inner_w = inner_width_mm / 2.0
+            half_inner_h = inner_height_mm / 2.0
+
+            lines = (
+                # outer zone
+                FieldLine(-half_outer_w, -half_outer_h, half_outer_w, -half_outer_h, line_width_mm),
+                FieldLine(half_outer_w, -half_outer_h, half_outer_w, half_outer_h, line_width_mm),
+                FieldLine(half_outer_w, half_outer_h, -half_outer_w, half_outer_h, line_width_mm),
+                FieldLine(-half_outer_w, half_outer_h, -half_outer_w, -half_outer_h, line_width_mm),
+
+                # inner zone
+                FieldLine(-half_inner_w, -half_inner_h, half_inner_w, -half_inner_h, line_width_mm),
+                FieldLine(half_inner_w, -half_inner_h, half_inner_w, half_inner_h, line_width_mm),
+                FieldLine(half_inner_w, half_inner_h, -half_inner_w, half_inner_h, line_width_mm),
+                FieldLine(-half_inner_w, half_inner_h, -half_inner_w, -half_inner_h, line_width_mm),
+            )
+
+            return FieldSpec(
+                field_id="FIELD-0005",
+                name="Nested Zones",
+                width_mm=field_width_mm,
+                height_mm=field_height_mm,
+                lines=lines,
+                parameters={
+                    "line_width_mm": line_width_mm,
+                    "outer_width_mm": outer_width_mm,
+                    "outer_height_mm": outer_height_mm,
+                    "inner_width_mm": inner_width_mm,
+                    "inner_height_mm": inner_height_mm,
+                },
+            )
+
+
+        def build_offset_zones_field(
+            *,
+            field_width_mm: float = DEFAULT_FIELD_WIDTH_MM,
+            field_height_mm: float = DEFAULT_FIELD_HEIGHT_MM,
+            line_width_mm: float = DEFAULT_LINE_WIDTH_MM,
+            zone_width_mm: float = 150.0,
+            zone_height_mm: float = 230.0,
+            offset_x_mm: float = 72.0,
+            offset_y_mm: float = 58.0,
+        ) -> FieldSpec:
+            """FIELD-0006 — Offset Zones
+
+            Two equal rectangular zones displaced diagonally from one another.
+            """
+
+            half_w = zone_width_mm / 2.0
+            half_h = zone_height_mm / 2.0
+
+            centers = (
+                (-offset_x_mm / 2.0, -offset_y_mm / 2.0),
+                ( offset_x_mm / 2.0,  offset_y_mm / 2.0),
+            )
+
+            lines = []
+
+            for cx, cy in centers:
+                left = cx - half_w
+                right = cx + half_w
+                bottom = cy - half_h
+                top = cy + half_h
+
+                lines.extend(
+                    (
+                        FieldLine(left, bottom, right, bottom, line_width_mm),
+                        FieldLine(right, bottom, right, top, line_width_mm),
+                        FieldLine(right, top, left, top, line_width_mm),
+                        FieldLine(left, top, left, bottom, line_width_mm),
+                    )
+                )
+
+            return FieldSpec(
+                field_id="FIELD-0006",
+                name="Offset Zones",
+                width_mm=field_width_mm,
+                height_mm=field_height_mm,
+                lines=tuple(lines),
+                parameters={
+                    "line_width_mm": line_width_mm,
+                    "zone_width_mm": zone_width_mm,
+                    "zone_height_mm": zone_height_mm,
+                    "offset_x_mm": offset_x_mm,
+                    "offset_y_mm": offset_y_mm,
+                },
+            )
+
+
+        def build_terminal_target_field(
+            *,
+            field_width_mm: float = DEFAULT_FIELD_WIDTH_MM,
+            field_height_mm: float = DEFAULT_FIELD_HEIGHT_MM,
+            line_width_mm: float = DEFAULT_LINE_WIDTH_MM,
+            corridor_width_mm: float = 125.0,
+            terminal_y_mm: float = 125.0,
+            target_width_mm: float = 185.0,
+        ) -> FieldSpec:
+            """FIELD-0007 — Terminal / Target
+
+            Two parallel boundaries rise from the lower field and terminate
+            against a transverse target boundary.
+            """
+
+            half_corridor = corridor_width_mm / 2.0
+            half_target = target_width_mm / 2.0
+
+            bottom = -field_height_mm / 2.0
+            target_y = terminal_y_mm
+
+            lines = (
+                FieldLine(
+                    -half_corridor,
+                    bottom,
+                    -half_corridor,
+                    target_y,
+                    line_width_mm,
+                ),
+                FieldLine(
+                    half_corridor,
+                    bottom,
+                    half_corridor,
+                    target_y,
+                    line_width_mm,
+                ),
+                FieldLine(
+                    -half_target,
+                    target_y,
+                    half_target,
+                    target_y,
+                    line_width_mm,
+                ),
+            )
+
+            return FieldSpec(
+                field_id="FIELD-0007",
+                name="Terminal / Target",
+                width_mm=field_width_mm,
+                height_mm=field_height_mm,
+                lines=lines,
+                parameters={
+                    "line_width_mm": line_width_mm,
+                    "corridor_width_mm": corridor_width_mm,
+                    "terminal_y_mm": terminal_y_mm,
+                    "target_width_mm": target_width_mm,
+                },
+            )
+        '''
+    )
+
+    builders_text += block
+
+# ============================================================
+# 2. PATCH IMPORTS IN fields.py
+# ============================================================
+
+import_candidates = [
+    "build_divergence_field,",
+    "build_divergence_field",
+]
+
+inserted_imports = False
+
+for candidate in import_candidates:
+    if candidate in fields_text:
+        replacement = candidate + '''
+    build_nested_zones_field,
+    build_offset_zones_field,
+    build_terminal_target_field,'''
+        fields_text = fields_text.replace(candidate, replacement, 1)
+        inserted_imports = True
+        break
+
+if not inserted_imports:
+    raise SystemExit(
+        "Could not locate field builder import block in fields.py."
+    )
+
+# ============================================================
+# 3. ADD ARCHITECTURES TO ENUM
+# ============================================================
+
+enum_anchor = '''            (
+                "DIVERGENCE",
+                "Divergence",
+'''
+
+if enum_anchor not in fields_text:
+    raise SystemExit(
+        "Could not locate architecture EnumProperty items."
+    )
+
+# Insert after Divergence item block by finding next closing pattern.
+pattern = re.compile(
+    r'(\(\s*"DIVERGENCE",\s*"Divergence",.*?\),)',
+    re.DOTALL,
+)
+
+match = pattern.search(fields_text)
+
+if not match:
+    raise SystemExit("Could not parse Divergence enum item.")
+
+new_items = textwrap.dedent(
+    '''
+            (
+                "NESTED_ZONES",
+                "Nested Zones",
+                "An outer zone containing an inner zone",
+            ),
+            (
+                "OFFSET_ZONES",
+                "Offset Zones",
+                "Two related zones displaced from one another",
+            ),
+            (
+                "TERMINAL_TARGET",
+                "Terminal / Target",
+                "A corridor terminating against a target boundary",
+            ),
+    '''
+)
+
+fields_text = (
+    fields_text[:match.end()]
+    + "\n"
+    + new_items
+    + fields_text[match.end():]
+)
+
+# ============================================================
+# 4. ADD BUILDER DISPATCH
+# ============================================================
+
+dispatch_anchor = '''        elif settings.architecture == "DIVERGENCE":
+'''
+
+if dispatch_anchor not in fields_text:
+    raise SystemExit(
+        "Could not locate architecture dispatch block."
+    )
+
+# Find the block following Divergence and insert before final else/creation.
+# We use a conservative replacement around the next known builder call region.
+dispatch_pattern = re.compile(
+    r'(elif settings\.architecture == "DIVERGENCE":.*?build_divergence_field\(.*?\)\s*)',
+    re.DOTALL,
+)
+
+dispatch_match = dispatch_pattern.search(fields_text)
+
+if not dispatch_match:
+    raise SystemExit(
+        "Could not parse Divergence dispatch block."
+    )
+
+dispatch_addition = textwrap.dedent(
+    '''
+
+        elif settings.architecture == "NESTED_ZONES":
+            spec = build_nested_zones_field(
+                line_width_mm=settings.line_width_mm,
+            )
+
+        elif settings.architecture == "OFFSET_ZONES":
+            spec = build_offset_zones_field(
+                line_width_mm=settings.line_width_mm,
+            )
+
+        elif settings.architecture == "TERMINAL_TARGET":
+            spec = build_terminal_target_field(
+                line_width_mm=settings.line_width_mm,
+            )
+    '''
+)
+
+fields_text = (
+    fields_text[:dispatch_match.end()]
+    + dispatch_addition
+    + fields_text[dispatch_match.end():]
+)
+
+# ============================================================
+# 5. SET SUBTLE_HAND DEFAULTS TO APPROVED VALUES
+# ============================================================
+
+fields_text = re.sub(
+    r'(edge_variation_mm\s*:\s*FloatProperty\(.*?default\s*=\s*)[0-9.]+',
+    r'\g<1>2.0',
+    fields_text,
+    count=1,
+    flags=re.DOTALL,
+)
+
+fields_text = re.sub(
+    r'(edge_variation_scale_mm\s*:\s*FloatProperty\(.*?default\s*=\s*)[0-9.]+',
+    r'\g<1>50.0',
+    fields_text,
+    count=1,
+    flags=re.DOTALL,
+)
+
+# ============================================================
+# 6. VERSION BUMP
+# ============================================================
+
+fields_text = re.sub(
+    r'FIELD_VERSION\s*=\s*"[^"]+"',
+    'FIELD_VERSION = "0.8.0-alpha.9"',
+    fields_text,
+    count=1,
+)
+
+builders_path.write_text(builders_text, encoding="utf-8")
+fields_path.write_text(fields_text, encoding="utf-8")
+
+# ============================================================
+# 7. TESTS
+# ============================================================
+
+if tests_path.exists():
+    tests_text = tests_path.read_text(encoding="utf-8")
+
+    if "test_nested_zones_field" not in tests_text:
+        tests_text += textwrap.dedent(
+            '''
+
+            def test_nested_zones_field():
+                from owde_addon.core.field_builders import build_nested_zones_field
+
+                spec = build_nested_zones_field()
+
+                assert spec.field_id == "FIELD-0005"
+                assert spec.name == "Nested Zones"
+                assert len(spec.lines) == 8
+
+
+            def test_offset_zones_field():
+                from owde_addon.core.field_builders import build_offset_zones_field
+
+                spec = build_offset_zones_field()
+
+                assert spec.field_id == "FIELD-0006"
+                assert spec.name == "Offset Zones"
+                assert len(spec.lines) == 8
+
+
+            def test_terminal_target_field():
+                from owde_addon.core.field_builders import build_terminal_target_field
+
+                spec = build_terminal_target_field()
+
+                assert spec.field_id == "FIELD-0007"
+                assert spec.name == "Terminal / Target"
+                assert len(spec.lines) == 3
+            '''
+        )
+
+        tests_path.write_text(tests_text, encoding="utf-8")
+
+# ============================================================
+# 8. OTHER VERSION LABELS
+# ============================================================
+
+if operators_path.exists():
+    op_text = operators_path.read_text(encoding="utf-8")
+
+    op_text = re.sub(
+        r'OWDE_VERSION\s*=\s*"[^"]+"',
+        'OWDE_VERSION = "0.8.0-alpha.9"',
+        op_text,
+        count=1,
+    )
+
+    operators_path.write_text(op_text, encoding="utf-8")
+
+if build_path.exists():
+    build_text = build_path.read_text(encoding="utf-8")
+
+    build_text = re.sub(
+        r'owde-[0-9A-Za-z.\-]+\.zip',
+        'owde-0.8.0-alpha.9.zip',
+        build_text,
+        count=1,
+    )
+
+    build_path.write_text(build_text, encoding="utf-8")
+
+print()
+print("Added Field Architecture Batch 02")
+print()
+print("  FIELD-0005  Nested Zones")
+print("  FIELD-0006  Offset Zones")
+print("  FIELD-0007  Terminal / Target")
+print()
+print("Approved edge defaults:")
+print("  SUBTLE_HAND")
+print("  variation amount: 2.0 mm")
+print("  variation scale: 50.0 mm")
+print()
+print("Version: 0.8.0-alpha.9")
+print()
+print(f"Backups:")
+print(f"  {builders_backup}")
+print(f"  {fields_backup}")
+PY

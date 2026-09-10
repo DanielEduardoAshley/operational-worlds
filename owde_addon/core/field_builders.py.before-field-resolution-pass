@@ -1,0 +1,378 @@
+"""Parametric field architectures for Operational Worlds.
+
+All dimensions are expressed in millimetres. The core layer intentionally
+contains no Blender dependency: it describes a rectangular field and a set of
+parameterized line segments that can drive Blender, projections, fabrication
+drawings, or archived research records.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from math import cos, radians, sin
+
+INCH_MM = 25.4
+
+DEFAULT_FIELD_WIDTH_MM = 20.0 * INCH_MM
+DEFAULT_FIELD_HEIGHT_MM = 16.0 * INCH_MM
+DEFAULT_LINE_WIDTH_MM = 0.25 * INCH_MM
+
+
+@dataclass(frozen=True)
+class FieldLine:
+    x1: float
+    y1: float
+    x2: float
+    y2: float
+    width_mm: float
+
+
+@dataclass(frozen=True)
+class FieldSpec:
+    field_id: str
+    name: str
+    width_mm: float
+    height_mm: float
+    lines: tuple[FieldLine, ...]
+    parameters: dict[str, float | str]
+
+
+def _validate_field(
+    width_mm: float,
+    height_mm: float,
+    line_width_mm: float,
+) -> None:
+    if width_mm <= 0:
+        raise ValueError("field width must be positive")
+
+    if height_mm <= 0:
+        raise ValueError("field height must be positive")
+
+    if line_width_mm <= 0:
+        raise ValueError("line width must be positive")
+
+
+def build_division_field(
+    width_mm: float = DEFAULT_FIELD_WIDTH_MM,
+    height_mm: float = DEFAULT_FIELD_HEIGHT_MM,
+    line_width_mm: float = DEFAULT_LINE_WIDTH_MM,
+    orientation: str = "VERTICAL",
+    position_mm: float = 0.0,
+) -> FieldSpec:
+    _validate_field(
+        width_mm,
+        height_mm,
+        line_width_mm,
+    )
+
+    orientation = orientation.upper()
+
+    if orientation == "VERTICAL":
+        if abs(position_mm) >= width_mm / 2.0:
+            raise ValueError("vertical division position must remain inside field")
+
+        lines = (
+            FieldLine(
+                position_mm,
+                -height_mm / 2.0,
+                position_mm,
+                height_mm / 2.0,
+                line_width_mm,
+            ),
+        )
+
+    elif orientation == "HORIZONTAL":
+        if abs(position_mm) >= height_mm / 2.0:
+            raise ValueError("horizontal division position must remain inside field")
+
+        lines = (
+            FieldLine(
+                -width_mm / 2.0,
+                position_mm,
+                width_mm / 2.0,
+                position_mm,
+                line_width_mm,
+            ),
+        )
+
+    else:
+        raise ValueError("orientation must be VERTICAL or HORIZONTAL")
+
+    return FieldSpec(
+        field_id="FIELD-0001",
+        name="Division",
+        width_mm=width_mm,
+        height_mm=height_mm,
+        lines=lines,
+        parameters={
+            "orientation": orientation,
+            "position_mm": position_mm,
+            "line_width_mm": line_width_mm,
+        },
+    )
+
+
+def build_intersection_field(
+    width_mm: float = DEFAULT_FIELD_WIDTH_MM,
+    height_mm: float = DEFAULT_FIELD_HEIGHT_MM,
+    line_width_mm: float = DEFAULT_LINE_WIDTH_MM,
+    vertical_position_mm: float = 0.0,
+    horizontal_position_mm: float = 0.0,
+) -> FieldSpec:
+    _validate_field(
+        width_mm,
+        height_mm,
+        line_width_mm,
+    )
+
+    if abs(vertical_position_mm) >= width_mm / 2.0:
+        raise ValueError("vertical line position must remain inside field")
+
+    if abs(horizontal_position_mm) >= height_mm / 2.0:
+        raise ValueError("horizontal line position must remain inside field")
+
+    lines = (
+        FieldLine(
+            vertical_position_mm,
+            -height_mm / 2.0,
+            vertical_position_mm,
+            height_mm / 2.0,
+            line_width_mm,
+        ),
+        FieldLine(
+            -width_mm / 2.0,
+            horizontal_position_mm,
+            width_mm / 2.0,
+            horizontal_position_mm,
+            line_width_mm,
+        ),
+    )
+
+    return FieldSpec(
+        field_id="FIELD-0002",
+        name="Intersection",
+        width_mm=width_mm,
+        height_mm=height_mm,
+        lines=lines,
+        parameters={
+            "vertical_position_mm": vertical_position_mm,
+            "horizontal_position_mm": horizontal_position_mm,
+            "line_width_mm": line_width_mm,
+        },
+    )
+
+
+def build_bottleneck_field(
+    width_mm: float = DEFAULT_FIELD_WIDTH_MM,
+    height_mm: float = DEFAULT_FIELD_HEIGHT_MM,
+    line_width_mm: float = DEFAULT_LINE_WIDTH_MM,
+    corridor_width_mm: float = 6.0 * INCH_MM,
+    throat_width_mm: float = 2.5 * INCH_MM,
+    throat_y_mm: float = 0.0,
+    transition_length_mm: float = 2.0 * INCH_MM,
+) -> FieldSpec:
+    _validate_field(
+        width_mm,
+        height_mm,
+        line_width_mm,
+    )
+
+    if corridor_width_mm <= 0:
+        raise ValueError("corridor width must be positive")
+
+    if throat_width_mm <= 0:
+        raise ValueError("throat width must be positive")
+
+    if throat_width_mm >= corridor_width_mm:
+        raise ValueError("throat width must be narrower than corridor width")
+
+    if corridor_width_mm >= width_mm:
+        raise ValueError("corridor width must fit inside field")
+
+    if transition_length_mm <= 0:
+        raise ValueError("transition length must be positive")
+
+    half_transition = transition_length_mm / 2.0
+    y_lower_transition = throat_y_mm - half_transition
+    y_upper_transition = throat_y_mm + half_transition
+
+    if y_lower_transition <= -height_mm / 2.0:
+        raise ValueError("lower transition falls outside field")
+
+    if y_upper_transition >= height_mm / 2.0:
+        raise ValueError("upper transition falls outside field")
+
+    corridor_half = corridor_width_mm / 2.0
+    throat_half = throat_width_mm / 2.0
+    bottom = -height_mm / 2.0
+    top = height_mm / 2.0
+
+    lines = (
+        FieldLine(
+            -corridor_half,
+            bottom,
+            -corridor_half,
+            y_lower_transition,
+            line_width_mm,
+        ),
+        FieldLine(
+            -corridor_half,
+            y_lower_transition,
+            -throat_half,
+            throat_y_mm,
+            line_width_mm,
+        ),
+        FieldLine(
+            -throat_half,
+            throat_y_mm,
+            -corridor_half,
+            y_upper_transition,
+            line_width_mm,
+        ),
+        FieldLine(
+            -corridor_half,
+            y_upper_transition,
+            -corridor_half,
+            top,
+            line_width_mm,
+        ),
+        FieldLine(
+            corridor_half,
+            bottom,
+            corridor_half,
+            y_lower_transition,
+            line_width_mm,
+        ),
+        FieldLine(
+            corridor_half,
+            y_lower_transition,
+            throat_half,
+            throat_y_mm,
+            line_width_mm,
+        ),
+        FieldLine(
+            throat_half,
+            throat_y_mm,
+            corridor_half,
+            y_upper_transition,
+            line_width_mm,
+        ),
+        FieldLine(
+            corridor_half,
+            y_upper_transition,
+            corridor_half,
+            top,
+            line_width_mm,
+        ),
+    )
+
+    return FieldSpec(
+        field_id="FIELD-0003",
+        name="Bottleneck",
+        width_mm=width_mm,
+        height_mm=height_mm,
+        lines=lines,
+        parameters={
+            "corridor_width_mm": corridor_width_mm,
+            "throat_width_mm": throat_width_mm,
+            "throat_y_mm": throat_y_mm,
+            "transition_length_mm": transition_length_mm,
+            "line_width_mm": line_width_mm,
+        },
+    )
+
+
+def build_divergence_field(
+    width_mm: float = DEFAULT_FIELD_WIDTH_MM,
+    height_mm: float = DEFAULT_FIELD_HEIGHT_MM,
+    line_width_mm: float = DEFAULT_LINE_WIDTH_MM,
+    split_y_mm: float = 0.0,
+    branch_angle_deg: float = 32.0,
+    branch_length_mm: float = 7.0 * INCH_MM,
+) -> FieldSpec:
+    _validate_field(
+        width_mm,
+        height_mm,
+        line_width_mm,
+    )
+
+    if branch_length_mm <= 0:
+        raise ValueError("branch length must be positive")
+
+    if not 1.0 <= branch_angle_deg <= 80.0:
+        raise ValueError("branch angle must be between 1 and 80 degrees")
+
+    if split_y_mm <= -height_mm / 2.0:
+        raise ValueError("split point is below field")
+
+    if split_y_mm >= height_mm / 2.0:
+        raise ValueError("split point is above field")
+
+    angle = radians(branch_angle_deg)
+    dx = sin(angle) * branch_length_mm
+    dy = cos(angle) * branch_length_mm
+
+    max_x = width_mm / 2.0
+    max_y = height_mm / 2.0
+    scale = 1.0
+
+    if abs(dx) > max_x:
+        scale = min(
+            scale,
+            max_x / abs(dx),
+        )
+
+    if split_y_mm + dy > max_y:
+        scale = min(
+            scale,
+            (max_y - split_y_mm) / dy,
+        )
+
+    dx *= scale
+    dy *= scale
+
+    lines = (
+        FieldLine(
+            0.0,
+            -height_mm / 2.0,
+            0.0,
+            split_y_mm,
+            line_width_mm,
+        ),
+        FieldLine(
+            0.0,
+            split_y_mm,
+            -dx,
+            split_y_mm + dy,
+            line_width_mm,
+        ),
+        FieldLine(
+            0.0,
+            split_y_mm,
+            dx,
+            split_y_mm + dy,
+            line_width_mm,
+        ),
+    )
+
+    return FieldSpec(
+        field_id="FIELD-0004",
+        name="Divergence",
+        width_mm=width_mm,
+        height_mm=height_mm,
+        lines=lines,
+        parameters={
+            "split_y_mm": split_y_mm,
+            "branch_angle_deg": branch_angle_deg,
+            "branch_length_mm": branch_length_mm,
+            "line_width_mm": line_width_mm,
+        },
+    )
+
+
+FIELD_BUILDERS = {
+    "DIVISION": build_division_field,
+    "INTERSECTION": build_intersection_field,
+    "BOTTLENECK": build_bottleneck_field,
+    "DIVERGENCE": build_divergence_field,
+}

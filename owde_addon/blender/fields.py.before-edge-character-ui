@@ -1,0 +1,655 @@
+"""Blender UI and unified object creation for OWDE field architectures."""
+
+from __future__ import annotations
+
+from math import atan2, hypot
+
+import bpy
+from bpy.props import EnumProperty, FloatProperty, PointerProperty
+from bpy.types import Operator, Panel, PropertyGroup
+
+from .edge_character import apply_subtle_hand_edge_character
+from ..core.field_builders import (
+    DEFAULT_FIELD_HEIGHT_MM,
+    DEFAULT_FIELD_WIDTH_MM,
+    DEFAULT_LINE_WIDTH_MM,
+    INCH_MM,
+    build_bottleneck_field,
+    build_divergence_field,
+    build_division_field,
+    build_intersection_field,
+)
+
+MM_TO_METERS = 0.001
+FIELD_VERSION = "0.8.0-alpha.7"
+EDGE_CHARACTER_MODE = "SUBTLE_HAND"
+EDGE_VARIATION_MM = 0.9
+EDGE_VARIATION_SCALE_MM = 42.0
+EDGE_VARIATION_SEED = 11
+FIELD_THICKNESS_MM = 22.0
+LINE_RELIEF_MM = 0.30
+
+
+def _principled_material(
+    name: str,
+    rgba: tuple[float, float, float, float],
+    roughness: float,
+):
+    existing = bpy.data.materials.get(name)
+
+    if existing:
+        return existing
+
+    material = bpy.data.materials.new(name)
+    material.use_nodes = True
+    material.diffuse_color = rgba
+
+    principled = material.node_tree.nodes.get("Principled BSDF")
+
+    if principled:
+        principled.inputs["Base Color"].default_value = rgba
+        principled.inputs["Roughness"].default_value = roughness
+
+    return material
+
+
+def field_green_material():
+    return _principled_material(
+        "OW_Field_Study_Green",
+        (0.016, 0.075, 0.050, 1.0),
+        0.34,
+    )
+
+
+def field_line_material():
+    return _principled_material(
+        "OW_Field_Line_White",
+        (0.91, 0.89, 0.78, 1.0),
+        0.43,
+    )
+
+
+def _new_collection(name: str):
+    collection = bpy.data.collections.new(name)
+    bpy.context.scene.collection.children.link(collection)
+    return collection
+
+
+def _create_box(
+    name: str,
+    dimensions_mm: tuple[float, float, float],
+    location_mm: tuple[float, float, float],
+    collection,
+):
+    sx, sy, sz = dimensions_mm
+    x, y, z = location_mm
+
+    bpy.ops.mesh.primitive_cube_add(
+        size=1.0,
+        location=(
+            x * MM_TO_METERS,
+            y * MM_TO_METERS,
+            z * MM_TO_METERS,
+        ),
+    )
+
+    obj = bpy.context.object
+    obj.name = name
+    obj.dimensions = (
+        sx * MM_TO_METERS,
+        sy * MM_TO_METERS,
+        sz * MM_TO_METERS,
+    )
+
+    bpy.ops.object.transform_apply(
+        location=False,
+        rotation=False,
+        scale=True,
+    )
+
+    for old_collection in list(obj.users_collection):
+        old_collection.objects.unlink(obj)
+
+    collection.objects.link(obj)
+
+    return obj
+
+
+def _create_field_base(spec, collection):
+    base = _create_box(
+        f"{spec.field_id}_{spec.name}_Field",
+        (
+            spec.width_mm,
+            spec.height_mm,
+            FIELD_THICKNESS_MM,
+        ),
+        (
+            0.0,
+            0.0,
+            -FIELD_THICKNESS_MM / 2.0,
+        ),
+        collection,
+    )
+
+    bevel = base.modifiers.new(
+        name="OW_Field_Edge_Bevel",
+        type="BEVEL",
+    )
+    bevel.width = 1.5 * MM_TO_METERS
+    bevel.segments = 3
+    bevel.limit_method = "ANGLE"
+
+    _activate_only(base)
+    bpy.ops.object.modifier_apply(modifier=bevel.name)
+
+    base.data.materials.append(field_green_material())
+    base.color = (0.016, 0.075, 0.050, 1.0)
+
+    return base
+
+
+def _activate_only(obj):
+    bpy.ops.object.select_all(action="DESELECT")
+    obj.select_set(True)
+    bpy.context.view_layer.objects.active = obj
+
+
+def _create_line_segment(line, index: int, field_id: str, collection):
+    """Create one exact ribbon segment without endpoint overrun."""
+
+    dx = line.x2 - line.x1
+    dy = line.y2 - line.y1
+    length = hypot(dx, dy)
+
+    if length <= 0:
+        raise ValueError("field line has zero length")
+
+    midpoint_x = (line.x1 + line.x2) / 2.0
+    midpoint_y = (line.y1 + line.y2) / 2.0
+    angle = atan2(dy, dx)
+
+    obj = _create_box(
+        f"{field_id}_Segment_{index:02d}",
+        (
+            length,
+            line.width_mm,
+            LINE_RELIEF_MM,
+        ),
+        (
+            midpoint_x,
+            midpoint_y,
+            LINE_RELIEF_MM / 2.0,
+        ),
+        collection,
+    )
+
+    obj.rotation_euler[2] = angle
+    _activate_only(obj)
+
+    bpy.ops.object.transform_apply(
+        location=False,
+        rotation=True,
+        scale=True,
+    )
+
+    obj.data.materials.append(field_line_material())
+
+    return obj
+
+
+def _point_key(x: float, y: float) -> tuple[float, float]:
+    return (
+        round(x, 5),
+        round(y, 5),
+    )
+
+
+def _junction_points(spec):
+    counts: dict[tuple[float, float], int] = {}
+
+    for line in spec.lines:
+        for x, y in (
+            (line.x1, line.y1),
+            (line.x2, line.y2),
+        ):
+            key = _point_key(x, y)
+            counts[key] = counts.get(key, 0) + 1
+
+    return [
+        point
+        for point, count in counts.items()
+        if count >= 2
+    ]
+
+
+def _create_junction_disc(
+    x_mm: float,
+    y_mm: float,
+    line_width_mm: float,
+    index: int,
+    field_id: str,
+    collection,
+):
+    bpy.ops.mesh.primitive_cylinder_add(
+        vertices=48,
+        radius=line_width_mm * 0.5 * MM_TO_METERS,
+        depth=LINE_RELIEF_MM * MM_TO_METERS,
+        location=(
+            x_mm * MM_TO_METERS,
+            y_mm * MM_TO_METERS,
+            LINE_RELIEF_MM * 0.5 * MM_TO_METERS,
+        ),
+    )
+
+    obj = bpy.context.object
+    obj.name = f"{field_id}_Junction_{index:02d}"
+
+    for old_collection in list(obj.users_collection):
+        old_collection.objects.unlink(obj)
+
+    collection.objects.link(obj)
+    obj.data.materials.append(field_line_material())
+
+    return obj
+
+
+def _boolean_union(target, other):
+    _activate_only(target)
+
+    modifier = target.modifiers.new(
+        name="OW_Field_Union",
+        type="BOOLEAN",
+    )
+    modifier.operation = "UNION"
+    modifier.solver = "EXACT"
+    modifier.object = other
+
+    bpy.context.view_layer.objects.active = target
+    bpy.ops.object.modifier_apply(modifier=modifier.name)
+    bpy.data.objects.remove(other, do_unlink=True)
+
+
+def _build_unified_linework(spec, collection):
+    pieces = []
+
+    for index, line in enumerate(spec.lines, start=1):
+        pieces.append(
+            _create_line_segment(
+                line,
+                index,
+                spec.field_id,
+                collection,
+            )
+        )
+
+    if spec.lines:
+        junction_width = spec.lines[0].width_mm
+
+        for index, (x, y) in enumerate(
+            _junction_points(spec),
+            start=1,
+        ):
+            pieces.append(
+                _create_junction_disc(
+                    x,
+                    y,
+                    junction_width,
+                    index,
+                    spec.field_id,
+                    collection,
+                )
+            )
+
+    if not pieces:
+        return None
+
+    architecture = pieces[0]
+    architecture.name = f"{spec.field_id}_{spec.name}_Architecture"
+
+    for piece in pieces[1:]:
+        _boolean_union(architecture, piece)
+
+    _activate_only(architecture)
+    bpy.ops.object.mode_set(mode="EDIT")
+    bpy.ops.mesh.select_all(action="SELECT")
+    bpy.ops.mesh.remove_doubles(threshold=0.00001)
+
+    if hasattr(bpy.ops.mesh, "normals_make_consistent"):
+        bpy.ops.mesh.normals_make_consistent(inside=False)
+
+    bpy.ops.object.mode_set(mode="OBJECT")
+
+    return architecture
+
+
+def _clip_architecture_to_field(architecture, spec, collection):
+    """Clip linework exactly to the field footprint."""
+
+    if architecture is None:
+        return None
+
+    clip_height_mm = max(
+        LINE_RELIEF_MM * 6.0,
+        2.0,
+    )
+    clip = _create_box(
+        f"{spec.field_id}_Field_Clip",
+        (
+            spec.width_mm,
+            spec.height_mm,
+            clip_height_mm,
+        ),
+        (
+            0.0,
+            0.0,
+            LINE_RELIEF_MM / 2.0,
+        ),
+        collection,
+    )
+
+    _activate_only(architecture)
+
+    modifier = architecture.modifiers.new(
+        name="OW_Field_Boundary_Clip",
+        type="BOOLEAN",
+    )
+    modifier.operation = "INTERSECT"
+    modifier.solver = "EXACT"
+    modifier.object = clip
+
+    bpy.context.view_layer.objects.active = architecture
+    bpy.ops.object.modifier_apply(modifier=modifier.name)
+    bpy.data.objects.remove(clip, do_unlink=True)
+
+    return architecture
+
+
+def _join_field_and_architecture(base, architecture, spec):
+    if architecture is None:
+        return base
+
+    bpy.ops.object.select_all(action="DESELECT")
+    base.select_set(True)
+    architecture.select_set(True)
+    bpy.context.view_layer.objects.active = base
+    bpy.ops.object.join()
+
+    combined = bpy.context.object
+    combined.name = f"{spec.field_id}_{spec.name}"
+
+    return combined
+
+
+def _create_field_from_spec(spec):
+    collection = _new_collection(f"{spec.field_id}_{spec.name}")
+    base = _create_field_base(spec, collection)
+    architecture = _build_unified_linework(spec, collection)
+    architecture = _clip_architecture_to_field(
+        architecture,
+        spec,
+        collection,
+    )
+    combined = _join_field_and_architecture(base, architecture, spec)
+
+    if EDGE_CHARACTER_MODE == "SUBTLE_HAND":
+        apply_subtle_hand_edge_character(
+            combined,
+            field_top_z_mm=0.0,
+            amplitude_mm=EDGE_VARIATION_MM,
+            scale_mm=EDGE_VARIATION_SCALE_MM,
+            seed=EDGE_VARIATION_SEED,
+        )
+
+    combined["owde_namespace"] = "FIELD"
+    combined["owde_field_id"] = spec.field_id
+    combined["owde_field_name"] = spec.name
+    combined["owde_version"] = FIELD_VERSION
+    combined["owde_width_mm"] = spec.width_mm
+    combined["owde_height_mm"] = spec.height_mm
+    combined["owde_orientation"] = "PORTRAIT"
+    combined["owde_canvas_width_in"] = spec.width_mm / INCH_MM
+    combined["owde_canvas_height_in"] = spec.height_mm / INCH_MM
+
+    for key, value in spec.parameters.items():
+        combined[f"owde_parameter_{key}"] = value
+
+    return combined, []
+
+
+class OWDE_PG_field_settings(PropertyGroup):
+    architecture: EnumProperty(
+        name="Architecture",
+        items=(
+            ("DIVISION", "Division", "FIELD-0001 - one line creates two territories"),
+            ("INTERSECTION", "Intersection", "FIELD-0002 - orthogonal crossing"),
+            ("BOTTLENECK", "Bottleneck", "FIELD-0003 - constrained throat"),
+            ("DIVERGENCE", "Divergence", "FIELD-0004 - one path branches"),
+        ),
+        default="DIVISION",
+    )
+
+    field_width_mm: FloatProperty(
+        name="Field Width",
+        default=DEFAULT_FIELD_WIDTH_MM,
+        min=25.4,
+    )
+
+    field_height_mm: FloatProperty(
+        name="Field Height",
+        default=DEFAULT_FIELD_HEIGHT_MM,
+        min=25.4,
+    )
+
+    line_width_mm: FloatProperty(
+        name="Line Width",
+        default=DEFAULT_LINE_WIDTH_MM,
+        min=0.5,
+    )
+
+    division_orientation: EnumProperty(
+        name="Orientation",
+        items=(
+            ("VERTICAL", "Vertical", "Divide left / right"),
+            ("HORIZONTAL", "Horizontal", "Divide top / bottom"),
+        ),
+        default="VERTICAL",
+    )
+
+    division_position_mm: FloatProperty(
+        name="Position",
+        default=0.0,
+    )
+
+    intersection_x_mm: FloatProperty(
+        name="Vertical Position",
+        default=0.0,
+    )
+
+    intersection_y_mm: FloatProperty(
+        name="Horizontal Position",
+        default=0.0,
+    )
+
+    bottleneck_corridor_width_mm: FloatProperty(
+        name="Corridor Width",
+        default=6.0 * INCH_MM,
+        min=5.0,
+    )
+
+    bottleneck_throat_width_mm: FloatProperty(
+        name="Throat Width",
+        default=2.5 * INCH_MM,
+        min=2.0,
+    )
+
+    bottleneck_throat_y_mm: FloatProperty(
+        name="Throat Position",
+        default=0.0,
+    )
+
+    bottleneck_transition_length_mm: FloatProperty(
+        name="Transition Length",
+        default=2.0 * INCH_MM,
+        min=2.0,
+    )
+
+    divergence_split_y_mm: FloatProperty(
+        name="Split Position",
+        default=0.0,
+    )
+
+    divergence_stem_width_mm: FloatProperty(
+        name="Stem Width",
+        description="Distance between the two parallel lower boundaries",
+        default=2.5 * INCH_MM,
+        min=5.0,
+    )
+
+    divergence_branch_angle_deg: FloatProperty(
+        name="Branch Angle",
+        default=32.0,
+        min=1.0,
+        max=80.0,
+    )
+
+    divergence_branch_length_mm: FloatProperty(
+        name="Branch Length",
+        default=7.0 * INCH_MM,
+        min=5.0,
+    )
+
+
+class OWDE_OT_create_field_architecture(Operator):
+    bl_idname = "owde.create_field_architecture"
+    bl_label = "Create Field Architecture"
+    bl_description = "Create a parametric Operational Worlds field architecture"
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        settings = context.scene.owde_field_settings
+        common = {
+            "width_mm": settings.field_width_mm,
+            "height_mm": settings.field_height_mm,
+            "line_width_mm": settings.line_width_mm,
+        }
+
+        try:
+            if settings.architecture == "DIVISION":
+                spec = build_division_field(
+                    **common,
+                    orientation=settings.division_orientation,
+                    position_mm=settings.division_position_mm,
+                )
+            elif settings.architecture == "INTERSECTION":
+                spec = build_intersection_field(
+                    **common,
+                    vertical_position_mm=settings.intersection_x_mm,
+                    horizontal_position_mm=settings.intersection_y_mm,
+                )
+            elif settings.architecture == "BOTTLENECK":
+                spec = build_bottleneck_field(
+                    **common,
+                    corridor_width_mm=settings.bottleneck_corridor_width_mm,
+                    throat_width_mm=settings.bottleneck_throat_width_mm,
+                    throat_y_mm=settings.bottleneck_throat_y_mm,
+                    transition_length_mm=settings.bottleneck_transition_length_mm,
+                )
+            else:
+                spec = build_divergence_field(
+                    **common,
+                    split_y_mm=settings.divergence_split_y_mm,
+                    stem_width_mm=settings.divergence_stem_width_mm,
+                    branch_angle_deg=settings.divergence_branch_angle_deg,
+                    branch_length_mm=settings.divergence_branch_length_mm,
+                )
+
+            base, _line_objects = _create_field_from_spec(spec)
+            bpy.ops.object.select_all(action="DESELECT")
+            base.select_set(True)
+            bpy.context.view_layer.objects.active = base
+
+            self.report({"INFO"}, f"Created {spec.field_id} {spec.name}")
+            return {"FINISHED"}
+
+        except ValueError as exc:
+            self.report({"ERROR"}, str(exc))
+            return {"CANCELLED"}
+
+
+class OWDE_PT_field_architectures(Panel):
+    bl_label = "Field Architectures"
+    bl_idname = "OWDE_PT_field_architectures"
+    bl_space_type = "VIEW_3D"
+    bl_region_type = "UI"
+    bl_category = "Operational Worlds"
+
+    def draw(self, context):
+        layout = self.layout
+        settings = context.scene.owde_field_settings
+
+        header = layout.box()
+        header.label(text="Field Architecture Library v0.1")
+        header.label(text='Default reference: 16" x 20" portrait')
+
+        layout.prop(settings, "architecture")
+
+        field_box = layout.box()
+        field_box.label(text="Field")
+        field_box.prop(settings, "field_width_mm")
+        field_box.prop(settings, "field_height_mm")
+        field_box.prop(settings, "line_width_mm")
+
+        architecture_box = layout.box()
+
+        if settings.architecture == "DIVISION":
+            architecture_box.label(text="FIELD-0001 - Division")
+            architecture_box.prop(settings, "division_orientation")
+            architecture_box.prop(settings, "division_position_mm")
+        elif settings.architecture == "INTERSECTION":
+            architecture_box.label(text="FIELD-0002 - Intersection")
+            architecture_box.prop(settings, "intersection_x_mm")
+            architecture_box.prop(settings, "intersection_y_mm")
+        elif settings.architecture == "BOTTLENECK":
+            architecture_box.label(text="FIELD-0003 - Bottleneck")
+            architecture_box.prop(settings, "bottleneck_corridor_width_mm")
+            architecture_box.prop(settings, "bottleneck_throat_width_mm")
+            architecture_box.prop(settings, "bottleneck_throat_y_mm")
+            architecture_box.prop(settings, "bottleneck_transition_length_mm")
+        else:
+            architecture_box.label(text="FIELD-0004 - Divergence")
+            architecture_box.prop(settings, "divergence_split_y_mm")
+            architecture_box.prop(settings, "divergence_stem_width_mm")
+            architecture_box.prop(settings, "divergence_branch_angle_deg")
+            architecture_box.prop(settings, "divergence_branch_length_mm")
+
+        layout.separator()
+        layout.operator(OWDE_OT_create_field_architecture.bl_idname, icon="MESH_PLANE")
+
+        note = layout.box()
+        note.label(text="Study Mode")
+        note.label(text="Deep green field + warm white lines")
+        note.label(text="One joined Blender object")
+
+
+_CLASSES = (
+    OWDE_PG_field_settings,
+    OWDE_OT_create_field_architecture,
+    OWDE_PT_field_architectures,
+)
+
+
+def register_fields():
+    for cls in _CLASSES:
+        bpy.utils.register_class(cls)
+
+    bpy.types.Scene.owde_field_settings = PointerProperty(
+        type=OWDE_PG_field_settings,
+    )
+
+
+def unregister_fields():
+    if hasattr(bpy.types.Scene, "owde_field_settings"):
+        del bpy.types.Scene.owde_field_settings
+
+    for cls in reversed(_CLASSES):
+        bpy.utils.unregister_class(cls)

@@ -7,7 +7,7 @@ from zipfile import ZIP_DEFLATED, ZipFile
 ROOT = Path(__file__).resolve().parents[1]
 ADDON_DIRECTORY = ROOT / "owde_addon"
 OUTPUT_DIRECTORY = ROOT / "dist"
-OUTPUT_FILE = OUTPUT_DIRECTORY / "owde-0.8.0-alpha.12.zip"
+OUTPUT_FILE = OUTPUT_DIRECTORY / "owde-0.7.0-alpha.1.zip"
 
 
 def main() -> None:

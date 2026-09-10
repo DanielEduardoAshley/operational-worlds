@@ -1,0 +1,548 @@
+python3 <<'PY'
+from pathlib import Path
+import re
+
+repo = Path(".")
+
+builders_path = repo / "owde_addon" / "core" / "field_builders.py"
+fields_path = repo / "owde_addon" / "blender" / "fields.py"
+operators_path = repo / "owde_addon" / "blender" / "operators.py"
+build_path = repo / "scripts" / "build_addon.py"
+tests_path = repo / "tests" / "test_field_builders.py"
+
+if not builders_path.exists():
+    raise SystemExit(
+        "Could not find owde_addon/core/field_builders.py\n"
+        "Run this from the OWDE repository root."
+    )
+
+text = builders_path.read_text(encoding="utf-8")
+
+backup = builders_path.with_suffix(
+    ".py.before-field-correction-alpha11"
+)
+backup.write_text(text, encoding="utf-8")
+
+# ============================================================
+# FIELD-0005 — NESTED ZONES
+#
+# Outer + middle centered.
+# Smallest box centered horizontally.
+# Smallest box offset vertically only.
+# ============================================================
+
+nested_pattern = re.compile(
+    r'def build_nested_zones_field\(.*?'
+    r'(?=\ndef build_offset_zones_field\()',
+    re.DOTALL,
+)
+
+nested_replacement = '''def build_nested_zones_field(
+    *,
+    field_width_mm: float = DEFAULT_FIELD_WIDTH_MM,
+    field_height_mm: float = DEFAULT_FIELD_HEIGHT_MM,
+    line_width_mm: float = DEFAULT_LINE_WIDTH_MM,
+
+    outer_width_mm: float = 345.0,
+    outer_height_mm: float = 435.0,
+
+    middle_width_mm: float = 245.0,
+    middle_height_mm: float = 325.0,
+
+    inner_width_mm: float = 115.0,
+    inner_height_mm: float = 145.0,
+
+    inner_offset_y_mm: float = -28.0,
+) -> FieldSpec:
+    """FIELD-0005 — Nested Zones
+
+    Three nested containment boundaries.
+
+    Outer and middle zones are centered.
+    The smallest zone remains centered horizontally
+    but is displaced vertically.
+    """
+
+    def rectangle_lines(
+        center_x: float,
+        center_y: float,
+        width: float,
+        height: float,
+    ):
+        half_w = width / 2.0
+        half_h = height / 2.0
+
+        left = center_x - half_w
+        right = center_x + half_w
+        bottom = center_y - half_h
+        top = center_y + half_h
+
+        return (
+            FieldLine(left, bottom, right, bottom, line_width_mm),
+            FieldLine(right, bottom, right, top, line_width_mm),
+            FieldLine(right, top, left, top, line_width_mm),
+            FieldLine(left, top, left, bottom, line_width_mm),
+        )
+
+    lines = (
+        *rectangle_lines(
+            0.0,
+            0.0,
+            outer_width_mm,
+            outer_height_mm,
+        ),
+        *rectangle_lines(
+            0.0,
+            0.0,
+            middle_width_mm,
+            middle_height_mm,
+        ),
+        *rectangle_lines(
+            0.0,
+            inner_offset_y_mm,
+            inner_width_mm,
+            inner_height_mm,
+        ),
+    )
+
+    return FieldSpec(
+        field_id="FIELD-0005",
+        name="Nested Zones",
+        width_mm=field_width_mm,
+        height_mm=field_height_mm,
+        lines=lines,
+        parameters={
+            "line_width_mm": line_width_mm,
+
+            "outer_width_mm": outer_width_mm,
+            "outer_height_mm": outer_height_mm,
+
+            "middle_width_mm": middle_width_mm,
+            "middle_height_mm": middle_height_mm,
+
+            "inner_width_mm": inner_width_mm,
+            "inner_height_mm": inner_height_mm,
+
+            "inner_offset_y_mm": inner_offset_y_mm,
+        },
+    )
+
+
+'''
+
+text, count = nested_pattern.subn(
+    nested_replacement,
+    text,
+    count=1,
+)
+
+if count != 1:
+    raise SystemExit(
+        "Could not replace build_nested_zones_field()."
+    )
+
+# ============================================================
+# FIELD-0006 — OFFSET ZONES
+#
+# Physical study:
+#
+# upper-left:
+#     one right-angle structure against edges
+#
+# lower-right:
+#     two nested / parallel right-angle structures
+#
+# They occupy diagonally opposed ends of the field.
+# ============================================================
+
+offset_pattern = re.compile(
+    r'def build_offset_zones_field\(.*?'
+    r'(?=\ndef build_terminal_target_field\()',
+    re.DOTALL,
+)
+
+offset_replacement = '''def build_offset_zones_field(
+    *,
+    field_width_mm: float = DEFAULT_FIELD_WIDTH_MM,
+    field_height_mm: float = DEFAULT_FIELD_HEIGHT_MM,
+    line_width_mm: float = DEFAULT_LINE_WIDTH_MM,
+
+    top_left_vertical_x_mm: float = -105.0,
+    top_left_horizontal_y_mm: float = 95.0,
+
+    lower_right_outer_x_mm: float = 85.0,
+    lower_right_outer_y_mm: float = -65.0,
+
+    lower_right_inner_x_mm: float = 125.0,
+    lower_right_inner_y_mm: float = -105.0,
+) -> FieldSpec:
+    """FIELD-0006 — Offset Zones
+
+    Opposed edge-anchored right-angle structures.
+
+    One right angle occupies the upper-left region.
+    A doubled right-angle structure occupies the
+    diagonally opposite lower-right region.
+    """
+
+    left = -field_width_mm / 2.0
+    right = field_width_mm / 2.0
+    bottom = -field_height_mm / 2.0
+    top = field_height_mm / 2.0
+
+    lines = (
+        # ----------------------------------------
+        # UPPER-LEFT RIGHT ANGLE
+        #
+        # vertical enters from top edge
+        # then turns left and exits side edge
+        # ----------------------------------------
+
+        FieldLine(
+            top_left_vertical_x_mm,
+            top,
+            top_left_vertical_x_mm,
+            top_left_horizontal_y_mm,
+            line_width_mm,
+        ),
+
+        FieldLine(
+            top_left_vertical_x_mm,
+            top_left_horizontal_y_mm,
+            left,
+            top_left_horizontal_y_mm,
+            line_width_mm,
+        ),
+
+        # ----------------------------------------
+        # LOWER-RIGHT — OUTER RIGHT ANGLE
+        #
+        # horizontal enters from right edge
+        # then turns downward and exits bottom
+        # ----------------------------------------
+
+        FieldLine(
+            right,
+            lower_right_outer_y_mm,
+            lower_right_outer_x_mm,
+            lower_right_outer_y_mm,
+            line_width_mm,
+        ),
+
+        FieldLine(
+            lower_right_outer_x_mm,
+            lower_right_outer_y_mm,
+            lower_right_outer_x_mm,
+            bottom,
+            line_width_mm,
+        ),
+
+        # ----------------------------------------
+        # LOWER-RIGHT — INNER PARALLEL RIGHT ANGLE
+        # ----------------------------------------
+
+        FieldLine(
+            right,
+            lower_right_inner_y_mm,
+            lower_right_inner_x_mm,
+            lower_right_inner_y_mm,
+            line_width_mm,
+        ),
+
+        FieldLine(
+            lower_right_inner_x_mm,
+            lower_right_inner_y_mm,
+            lower_right_inner_x_mm,
+            bottom,
+            line_width_mm,
+        ),
+    )
+
+    return FieldSpec(
+        field_id="FIELD-0006",
+        name="Offset Zones",
+        width_mm=field_width_mm,
+        height_mm=field_height_mm,
+        lines=lines,
+        parameters={
+            "line_width_mm": line_width_mm,
+
+            "top_left_vertical_x_mm": top_left_vertical_x_mm,
+            "top_left_horizontal_y_mm": top_left_horizontal_y_mm,
+
+            "lower_right_outer_x_mm": lower_right_outer_x_mm,
+            "lower_right_outer_y_mm": lower_right_outer_y_mm,
+
+            "lower_right_inner_x_mm": lower_right_inner_x_mm,
+            "lower_right_inner_y_mm": lower_right_inner_y_mm,
+        },
+    )
+
+
+'''
+
+text, count = offset_pattern.subn(
+    offset_replacement,
+    text,
+    count=1,
+)
+
+if count != 1:
+    raise SystemExit(
+        "Could not replace build_offset_zones_field()."
+    )
+
+# ============================================================
+# FIELD-0007 — TERMINAL / TARGET
+#
+# Small U-shaped target centered directly under
+# the vertical T-bar stem.
+# ============================================================
+
+target_pattern = re.compile(
+    r'def build_terminal_target_field\(.*',
+    re.DOTALL,
+)
+
+target_replacement = '''def build_terminal_target_field(
+    *,
+    field_width_mm: float = DEFAULT_FIELD_WIDTH_MM,
+    field_height_mm: float = DEFAULT_FIELD_HEIGHT_MM,
+    line_width_mm: float = DEFAULT_LINE_WIDTH_MM,
+
+    outer_margin_x_mm: float = 22.0,
+    outer_margin_y_mm: float = 22.0,
+
+    division_y_mm: float = 25.0,
+
+    upper_divider_x_mm: float = -22.0,
+
+    target_width_mm: float = 105.0,
+    target_depth_mm: float = 72.0,
+) -> FieldSpec:
+    """FIELD-0007 — Terminal / Target
+
+    Outer containment + horizontal division + vertical stem.
+
+    The lower U-shaped target is centered precisely
+    on the vertical stem of the T-bar.
+    """
+
+    field_left = -field_width_mm / 2.0
+    field_right = field_width_mm / 2.0
+    field_bottom = -field_height_mm / 2.0
+    field_top = field_height_mm / 2.0
+
+    left = field_left + outer_margin_x_mm
+    right = field_right - outer_margin_x_mm
+    bottom = field_bottom + outer_margin_y_mm
+    top = field_top - outer_margin_y_mm
+
+    # Target center is tied directly to T-bar stem.
+    target_center_x_mm = upper_divider_x_mm
+
+    target_left = (
+        target_center_x_mm
+        - target_width_mm / 2.0
+    )
+
+    target_right = (
+        target_center_x_mm
+        + target_width_mm / 2.0
+    )
+
+    target_bottom = (
+        division_y_mm
+        - target_depth_mm
+    )
+
+    lines = (
+        # outer containment
+        FieldLine(left, bottom, right, bottom, line_width_mm),
+        FieldLine(right, bottom, right, top, line_width_mm),
+        FieldLine(right, top, left, top, line_width_mm),
+        FieldLine(left, top, left, bottom, line_width_mm),
+
+        # horizontal T-bar / division
+        FieldLine(
+            left,
+            division_y_mm,
+            right,
+            division_y_mm,
+            line_width_mm,
+        ),
+
+        # vertical stem
+        FieldLine(
+            upper_divider_x_mm,
+            top,
+            upper_divider_x_mm,
+            division_y_mm,
+            line_width_mm,
+        ),
+
+        # U-shaped target centered on stem
+        FieldLine(
+            target_left,
+            division_y_mm,
+            target_left,
+            target_bottom,
+            line_width_mm,
+        ),
+
+        FieldLine(
+            target_left,
+            target_bottom,
+            target_right,
+            target_bottom,
+            line_width_mm,
+        ),
+
+        FieldLine(
+            target_right,
+            target_bottom,
+            target_right,
+            division_y_mm,
+            line_width_mm,
+        ),
+    )
+
+    return FieldSpec(
+        field_id="FIELD-0007",
+        name="Terminal / Target",
+        width_mm=field_width_mm,
+        height_mm=field_height_mm,
+        lines=lines,
+        parameters={
+            "line_width_mm": line_width_mm,
+
+            "outer_margin_x_mm": outer_margin_x_mm,
+            "outer_margin_y_mm": outer_margin_y_mm,
+
+            "division_y_mm": division_y_mm,
+            "upper_divider_x_mm": upper_divider_x_mm,
+
+            "target_width_mm": target_width_mm,
+            "target_depth_mm": target_depth_mm,
+        },
+    )
+'''
+
+text, count = target_pattern.subn(
+    target_replacement,
+    text,
+    count=1,
+)
+
+if count != 1:
+    raise SystemExit(
+        "Could not replace build_terminal_target_field()."
+    )
+
+builders_path.write_text(text, encoding="utf-8")
+
+# ============================================================
+# VERSION BUMPS
+# ============================================================
+
+if fields_path.exists():
+    t = fields_path.read_text(encoding="utf-8")
+
+    t = re.sub(
+        r'FIELD_VERSION\s*=\s*"[^"]+"',
+        'FIELD_VERSION = "0.8.0-alpha.11"',
+        t,
+        count=1,
+    )
+
+    fields_path.write_text(t, encoding="utf-8")
+
+if operators_path.exists():
+    t = operators_path.read_text(encoding="utf-8")
+
+    t = re.sub(
+        r'OWDE_VERSION\s*=\s*"[^"]+"',
+        'OWDE_VERSION = "0.8.0-alpha.11"',
+        t,
+        count=1,
+    )
+
+    operators_path.write_text(t, encoding="utf-8")
+
+if build_path.exists():
+    t = build_path.read_text(encoding="utf-8")
+
+    t = re.sub(
+        r'owde-[0-9A-Za-z.\-]+\.zip',
+        'owde-0.8.0-alpha.11.zip',
+        t,
+        count=1,
+    )
+
+    build_path.write_text(t, encoding="utf-8")
+
+# ============================================================
+# TEST UPDATES
+# ============================================================
+
+if tests_path.exists():
+    tests = tests_path.read_text(encoding="utf-8")
+
+    # Nested still has 12 segments.
+    tests = re.sub(
+        r'(def test_nested_zones_field\(\):.*?'
+        r'assert len\(spec\.lines\) == )\d+',
+        r'\g<1>12',
+        tests,
+        count=1,
+        flags=re.DOTALL,
+    )
+
+    # Offset now has:
+    # 2 lines upper-left
+    # 2 outer lower-right
+    # 2 inner lower-right
+    # = 6 segments.
+    tests = re.sub(
+        r'(def test_offset_zones_field\(\):.*?'
+        r'assert len\(spec\.lines\) == )\d+',
+        r'\g<1>6',
+        tests,
+        count=1,
+        flags=re.DOTALL,
+    )
+
+    # Target remains 9 segments.
+    tests = re.sub(
+        r'(def test_terminal_target_field\(\):.*?'
+        r'assert len\(spec\.lines\) == )\d+',
+        r'\g<1>9',
+        tests,
+        count=1,
+        flags=re.DOTALL,
+    )
+
+    tests_path.write_text(
+        tests,
+        encoding="utf-8",
+    )
+
+print()
+print("FIELD ARCHITECTURE CORRECTION — alpha.11")
+print()
+print("FIELD-0005 Nested Zones")
+print("  - inner box horizontally centered")
+print("  - inner box vertically offset")
+print()
+print("FIELD-0006 Offset Zones")
+print("  - upper-left edge-anchored right angle")
+print("  - lower-right edge-anchored right angle")
+print("  - lower-right angle doubled")
+print()
+print("FIELD-0007 Terminal / Target")
+print("  - target now centered directly on T-bar stem")
+print()
+print("Version: 0.8.0-alpha.11")
+print()
+print(f"Backup: {backup}")
+PY

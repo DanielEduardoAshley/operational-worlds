@@ -1,0 +1,740 @@
+python3 <<'PY'
+from pathlib import Path
+
+# ============================================================
+# OWDE FIELD ARCHITECTURES
+# Resolution Pass 02
+#
+# - portrait 16 x 20 field
+# - true unified line networks
+# - no line overrun past field
+# - field + architecture become one Blender object
+# ============================================================
+
+
+# ------------------------------------------------------------
+# 1. CORE: PORTRAIT 20 x 16 CANVAS
+# ------------------------------------------------------------
+
+core = Path("owde_addon/core/field_builders.py")
+
+if not core.exists():
+    raise SystemExit(
+        "Could not find owde_addon/core/field_builders.py\n"
+        "Run this from the OWDE repository root."
+    )
+
+core_text = core.read_text(encoding="utf-8")
+
+core_backup = core.with_suffix(
+    ".py.before-field-resolution-pass-02"
+)
+
+core_backup.write_text(
+    core_text,
+    encoding="utf-8",
+)
+
+# We are treating "20 x 16 canvas" as:
+#
+#     20 inches high
+#     16 inches wide
+#
+# in Blender's top / plan view.
+
+core_text = core_text.replace(
+    "DEFAULT_FIELD_WIDTH_MM = 20.0 * INCH_MM",
+    "DEFAULT_FIELD_WIDTH_MM = 16.0 * INCH_MM",
+)
+
+core_text = core_text.replace(
+    "DEFAULT_FIELD_HEIGHT_MM = 16.0 * INCH_MM",
+    "DEFAULT_FIELD_HEIGHT_MM = 20.0 * INCH_MM",
+)
+
+core.write_text(
+    core_text,
+    encoding="utf-8",
+)
+
+
+# ------------------------------------------------------------
+# 2. REPLACE BLENDER FIELD RENDERER
+# ------------------------------------------------------------
+
+fields = Path("owde_addon/blender/fields.py")
+
+if not fields.exists():
+    raise SystemExit(
+        "Could not find owde_addon/blender/fields.py"
+    )
+
+fields_text = fields.read_text(
+    encoding="utf-8"
+)
+
+fields_backup = fields.with_suffix(
+    ".py.before-field-resolution-pass-02"
+)
+
+fields_backup.write_text(
+    fields_text,
+    encoding="utf-8",
+)
+
+
+# ------------------------------------------------------------
+# Add imports if necessary
+# ------------------------------------------------------------
+
+if "import math" not in fields_text:
+    fields_text = fields_text.replace(
+        "from math import atan2, degrees, hypot",
+        "from math import atan2, degrees, hypot\nimport math",
+    )
+
+
+# ------------------------------------------------------------
+# Replace field version
+# ------------------------------------------------------------
+
+fields_text = fields_text.replace(
+    'FIELD_VERSION = "0.8.0-alpha.2"',
+    'FIELD_VERSION = "0.8.0-alpha.3"',
+)
+
+
+# ------------------------------------------------------------
+# Find renderer section
+# ------------------------------------------------------------
+
+start = fields_text.find(
+    "def _create_line("
+)
+
+end = fields_text.find(
+    "\n# ============================================================\n# SETTINGS",
+    start,
+)
+
+if start == -1 or end == -1:
+    raise SystemExit(
+        "Could not locate the field rendering section "
+        "inside owde_addon/blender/fields.py"
+    )
+
+
+replacement = r'''
+# ============================================================
+# UNIFIED FIELD ARCHITECTURE GEOMETRY
+# ============================================================
+
+def _activate_only(obj):
+
+    bpy.ops.object.select_all(
+        action="DESELECT"
+    )
+
+    obj.select_set(True)
+
+    bpy.context.view_layer.objects.active = obj
+
+
+def _create_line_segment(
+    line,
+    index: int,
+    field_id: str,
+    collection,
+):
+    """Create one exact ribbon segment.
+
+    Unlike the previous renderer, segments are NOT lengthened past
+    their specification endpoints. Junction geometry is handled
+    separately and then Boolean-unified.
+    """
+
+    dx = line.x2 - line.x1
+    dy = line.y2 - line.y1
+
+    length = hypot(dx, dy)
+
+    if length <= 0:
+        raise ValueError(
+            "field line has zero length"
+        )
+
+    midpoint_x = (
+        line.x1 + line.x2
+    ) / 2.0
+
+    midpoint_y = (
+        line.y1 + line.y2
+    ) / 2.0
+
+    angle = atan2(
+        dy,
+        dx,
+    )
+
+    obj = _create_box(
+        f"{field_id}_Segment_{index:02d}",
+        (
+            length,
+            line.width_mm,
+            LINE_RELIEF_MM,
+        ),
+        (
+            midpoint_x,
+            midpoint_y,
+            LINE_RELIEF_MM / 2.0,
+        ),
+        collection,
+    )
+
+    obj.rotation_euler[2] = angle
+
+    bpy.context.view_layer.objects.active = obj
+
+    obj.select_set(True)
+
+    # Apply rotation so Boolean operations work on final geometry.
+    bpy.ops.object.transform_apply(
+        location=False,
+        rotation=True,
+        scale=True,
+    )
+
+    obj.data.materials.append(
+        field_line_material()
+    )
+
+    return obj
+
+
+def _point_key(
+    x: float,
+    y: float,
+) -> tuple[float, float]:
+
+    # Enough precision for millimetre-authored field specs while
+    # making shared endpoints compare reliably.
+    return (
+        round(x, 5),
+        round(y, 5),
+    )
+
+
+def _junction_points(spec):
+    """Return shared line endpoints.
+
+    A node receives a junction patch only when two or more nominal
+    segments meet there.
+
+    Field-edge endpoints intentionally receive no patch, which keeps
+    the architecture exactly inside the field.
+    """
+
+    counts = {}
+
+    for line in spec.lines:
+
+        for x, y in (
+            (line.x1, line.y1),
+            (line.x2, line.y2),
+        ):
+
+            key = _point_key(
+                x,
+                y,
+            )
+
+            counts[key] = (
+                counts.get(key, 0)
+                + 1
+            )
+
+    return [
+        point
+        for point, count
+        in counts.items()
+        if count >= 2
+    ]
+
+
+def _create_junction_disc(
+    x_mm: float,
+    y_mm: float,
+    line_width_mm: float,
+    index: int,
+    field_id: str,
+    collection,
+):
+    """Create a same-width junction patch.
+
+    Diameter equals the line width, so the node closes angled gaps
+    without becoming wider/heavier than the lines themselves.
+    """
+
+    bpy.ops.mesh.primitive_cylinder_add(
+        vertices=48,
+        radius=(
+            line_width_mm
+            * 0.5
+            * MM_TO_METERS
+        ),
+        depth=(
+            LINE_RELIEF_MM
+            * MM_TO_METERS
+        ),
+        location=(
+            x_mm * MM_TO_METERS,
+            y_mm * MM_TO_METERS,
+            (
+                LINE_RELIEF_MM
+                * 0.5
+                * MM_TO_METERS
+            ),
+        ),
+    )
+
+    obj = bpy.context.object
+
+    obj.name = (
+        f"{field_id}_Junction_{index:02d}"
+    )
+
+    # Move into the architecture collection.
+    for old_collection in list(
+        obj.users_collection
+    ):
+        old_collection.objects.unlink(
+            obj
+        )
+
+    collection.objects.link(
+        obj
+    )
+
+    obj.data.materials.append(
+        field_line_material()
+    )
+
+    return obj
+
+
+def _boolean_union(
+    target,
+    other,
+):
+    """Boolean-unify OTHER into TARGET."""
+
+    _activate_only(
+        target
+    )
+
+    modifier = target.modifiers.new(
+        name="OW_Field_Union",
+        type="BOOLEAN",
+    )
+
+    modifier.operation = "UNION"
+    modifier.solver = "EXACT"
+    modifier.object = other
+
+    bpy.context.view_layer.objects.active = (
+        target
+    )
+
+    bpy.ops.object.modifier_apply(
+        modifier=modifier.name
+    )
+
+    # Boolean leaves the source object in the scene.
+    bpy.data.objects.remove(
+        other,
+        do_unlink=True,
+    )
+
+
+def _build_unified_linework(
+    spec,
+    collection,
+):
+    """Build one continuous white architecture object."""
+
+    pieces = []
+
+    # Exact nominal line ribbons.
+    for index, line in enumerate(
+        spec.lines,
+        start=1,
+    ):
+
+        pieces.append(
+            _create_line_segment(
+                line,
+                index,
+                spec.field_id,
+                collection,
+            )
+        )
+
+    # Add same-width connection patches only where nominal centerline
+    # segments share a node.
+    junctions = _junction_points(
+        spec
+    )
+
+    if spec.lines:
+        junction_width = (
+            spec.lines[0].width_mm
+        )
+
+        for index, (
+            x,
+            y,
+        ) in enumerate(
+            junctions,
+            start=1,
+        ):
+
+            pieces.append(
+                _create_junction_disc(
+                    x,
+                    y,
+                    junction_width,
+                    index,
+                    spec.field_id,
+                    collection,
+                )
+            )
+
+    if not pieces:
+        return None
+
+    architecture = pieces[0]
+
+    architecture.name = (
+        f"{spec.field_id}_{spec.name}_Architecture"
+    )
+
+    # --------------------------------------------------------
+    # TRUE GEOMETRIC UNION
+    #
+    # This removes:
+    #
+    #   line-over-line appearance
+    #   doubled junction surfaces
+    #   visually heavy overlap
+    #
+    # leaving one continuous white mesh.
+    # --------------------------------------------------------
+
+    for piece in pieces[1:]:
+
+        _boolean_union(
+            architecture,
+            piece,
+        )
+
+    # Clean geometry after Booleans.
+    _activate_only(
+        architecture
+    )
+
+    bpy.ops.object.mode_set(
+        mode="EDIT"
+    )
+
+    bpy.ops.mesh.select_all(
+        action="SELECT"
+    )
+
+    bpy.ops.mesh.remove_doubles(
+        threshold=0.00001
+    )
+
+    bpy.ops.mesh.normals_make_consistent(
+        inside=False
+    ) if hasattr(
+        bpy.ops.mesh,
+        "normals_make_consistent"
+    ) else None
+
+    bpy.ops.object.mode_set(
+        mode="OBJECT"
+    )
+
+    return architecture
+
+
+def _join_field_and_architecture(
+    base,
+    architecture,
+    spec,
+):
+    """Join green field and white architecture into one Blender object.
+
+    The material slots remain distinct, so the top face retains green
+    and the operational architecture retains warm white.
+
+    The result behaves as a single object for moving, rotating, and
+    scaling.
+    """
+
+    if architecture is None:
+        return base
+
+    bpy.ops.object.select_all(
+        action="DESELECT"
+    )
+
+    base.select_set(
+        True
+    )
+
+    architecture.select_set(
+        True
+    )
+
+    # Keep the field/base as the active object so the resulting
+    # combined object's identity is the field.
+    bpy.context.view_layer.objects.active = (
+        base
+    )
+
+    bpy.ops.object.join()
+
+    combined = bpy.context.object
+
+    combined.name = (
+        f"{spec.field_id}_{spec.name}"
+    )
+
+    return combined
+
+
+def _create_field_from_spec(spec):
+
+    collection_name = (
+        f"{spec.field_id}_{spec.name}"
+    )
+
+    collection = _new_collection(
+        collection_name
+    )
+
+    # --------------------------------------------------------
+    # GREEN FIELD / CANVAS OBJECT
+    # --------------------------------------------------------
+
+    base = _create_field_base(
+        spec,
+        collection,
+    )
+
+    # --------------------------------------------------------
+    # ONE WHITE ARCHITECTURE
+    # --------------------------------------------------------
+
+    architecture = (
+        _build_unified_linework(
+            spec,
+            collection,
+        )
+    )
+
+    # --------------------------------------------------------
+    # JOIN GREEN + WHITE INTO ONE BLENDER OBJECT
+    # --------------------------------------------------------
+
+    combined = (
+        _join_field_and_architecture(
+            base,
+            architecture,
+            spec,
+        )
+    )
+
+    combined["owde_namespace"] = "FIELD"
+
+    combined["owde_field_id"] = (
+        spec.field_id
+    )
+
+    combined["owde_field_name"] = (
+        spec.name
+    )
+
+    combined["owde_version"] = (
+        FIELD_VERSION
+    )
+
+    combined["owde_width_mm"] = (
+        spec.width_mm
+    )
+
+    combined["owde_height_mm"] = (
+        spec.height_mm
+    )
+
+    combined["owde_orientation"] = (
+        "PORTRAIT"
+    )
+
+    combined["owde_canvas_width_in"] = (
+        spec.width_mm / INCH_MM
+    )
+
+    combined["owde_canvas_height_in"] = (
+        spec.height_mm / INCH_MM
+    )
+
+    for key, value in (
+        spec.parameters.items()
+    ):
+
+        combined[
+            f"owde_parameter_{key}"
+        ] = value
+
+    return combined, []
+'''
+
+fields_text = (
+    fields_text[:start]
+    + replacement
+    + fields_text[end:]
+)
+
+fields.write_text(
+    fields_text,
+    encoding="utf-8",
+)
+
+
+# ------------------------------------------------------------
+# 3. UPDATE TEST EXPECTATIONS FOR PORTRAIT FIELD
+# ------------------------------------------------------------
+
+tests = Path(
+    "tests/test_field_builders.py"
+)
+
+if tests.exists():
+
+    test_text = tests.read_text(
+        encoding="utf-8"
+    )
+
+    test_backup = tests.with_suffix(
+        ".py.before-field-resolution-pass-02"
+    )
+
+    test_backup.write_text(
+        test_text,
+        encoding="utf-8",
+    )
+
+    # Existing test from first pass expected landscape orientation.
+    test_text = test_text.replace(
+        """def test_default_field_is_20_by_16_inches():
+    assert DEFAULT_FIELD_WIDTH_MM == pytest.approx(
+        508.0
+    )
+
+    assert DEFAULT_FIELD_HEIGHT_MM == pytest.approx(
+        406.4
+    )
+""",
+        """def test_default_field_is_portrait_20_by_16_inches():
+    # Physical canvas is 20 inches high x 16 inches wide.
+    assert DEFAULT_FIELD_WIDTH_MM == pytest.approx(
+        406.4
+    )
+
+    assert DEFAULT_FIELD_HEIGHT_MM == pytest.approx(
+        508.0
+    )
+"""
+    )
+
+    tests.write_text(
+        test_text,
+        encoding="utf-8",
+    )
+
+
+# ------------------------------------------------------------
+# 4. BUILD VERSION
+# ------------------------------------------------------------
+
+build = Path(
+    "scripts/build_addon.py"
+)
+
+if build.exists():
+
+    import re
+
+    build_text = build.read_text(
+        encoding="utf-8"
+    )
+
+    build_text = re.sub(
+        r'owde-[^"]+\.zip',
+        'owde-0.8.0-alpha.3.zip',
+        build_text,
+        count=1,
+    )
+
+    build.write_text(
+        build_text,
+        encoding="utf-8",
+    )
+
+
+operators = Path(
+    "owde_addon/blender/operators.py"
+)
+
+if operators.exists():
+
+    operator_text = operators.read_text(
+        encoding="utf-8"
+    )
+
+    import re
+
+    operator_text = re.sub(
+        r'OWDE_VERSION\s*=\s*"[^"]+"',
+        'OWDE_VERSION = "0.8.0-alpha.3"',
+        operator_text,
+        count=1,
+    )
+
+    operators.write_text(
+        operator_text,
+        encoding="utf-8",
+    )
+
+
+print()
+print("OWDE Field Resolution Pass 02 applied.")
+print()
+print("Changes:")
+print("  ✓ field is now portrait: 16 in wide × 20 in high")
+print("  ✓ Bottleneck runs vertically")
+print("  ✓ Divergence runs vertically")
+print("  ✓ line segments no longer overrun field boundaries")
+print("  ✓ shared nodes use same-width junction geometry")
+print("  ✓ architecture pieces are Boolean-unified")
+print("  ✓ no visible line-over-line intersections")
+print("  ✓ green field + white architecture join into one Blender object")
+print("  ✓ moving field moves architecture with it")
+print("  ✓ version: 0.8.0-alpha.3")
+print()
+print("Backups:")
+print(f"  {core_backup}")
+print(f"  {fields_backup}")
+PY

@@ -1,7 +1,7 @@
 bl_info = {
     "name": "Operational Worlds Design Engine",
     "author": "Operational Worlds Research Program",
-    "version": (0, 8, 0),
+    "version": (0, 7, 0),
     "blender": (4, 2, 0),
     "location": "View3D > Sidebar > Operational Worlds",
     "description": "Create, inspect, render, and export parametric Operational Worlds primitives",
@@ -37,7 +37,6 @@ def register() -> None:
     import bpy
 
     from .blender.competition import register_competition
-    from .blender.fields import register_fields
 
     base_classes = _base_classes()
 
@@ -49,16 +48,13 @@ def register() -> None:
     )
 
     register_competition()
-    register_fields()
 
 
 def unregister() -> None:
     import bpy
 
     from .blender.competition import unregister_competition
-    from .blender.fields import unregister_fields
 
-    unregister_fields()
     unregister_competition()
 
     if hasattr(bpy.types.Scene, "owde_settings"):
