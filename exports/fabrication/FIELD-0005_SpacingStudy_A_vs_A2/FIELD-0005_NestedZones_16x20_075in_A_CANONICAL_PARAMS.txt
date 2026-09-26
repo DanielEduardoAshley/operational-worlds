@@ -1,0 +1,39 @@
+FIELD-0005 SPACING STUDY — A vs A2
+
+Variant:
+A — Canonical spacing
+
+Field:
+406.400 x 508.000 mm
+16 x 20 in
+
+Architecture width:
+19.050 mm
+0.750 in
+
+Outer:
+345.000 x 435.000 mm
+
+Middle:
+245.000 x 325.000 mm
+
+Inner:
+115.000 x 145.000 mm
+
+Inner Y offset:
+-28.000 mm
+
+Approximate clear green spacing:
+
+Outer -> Middle horizontal:
+30.950 mm
+
+Outer -> Middle vertical:
+35.950 mm
+
+Middle -> Inner horizontal:
+45.950 mm
+
+NOTE:
+Exploratory fabrication study only.
+Canonical FIELD-0005 builder defaults are unchanged.

@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<svg
+    xmlns="http://www.w3.org/2000/svg"
+    width="914.4mm"
+    height="914.4mm"
+    viewBox="0 0 914.4 914.4"
+>
+
+<title>
+FIELD-0004 Divergence
+36 x 36 in
+Architecture width 1.000 in
+</title>
+
+
+<defs>
+
+    <clipPath id="fieldClip">
+
+        <rect
+            x="0"
+            y="0"
+            width="914.4"
+            height="914.4"
+        />
+
+    </clipPath>
+
+</defs>
+
+
+<!-- FIELD -->
+
+<rect
+    x="0"
+    y="0"
+    width="914.4"
+    height="914.4"
+    fill="#062D20"
+/>
+
+
+<!-- CONTINUOUS MITERED ARCHITECTURE -->
+
+<g clip-path="url(#fieldClip)">
+
+    <polygon
+        points="412.75,914.4 412.75,460.8417 81.3745,-69.47 102.9149,-82.93 438.15,453.5583 438.15,914.4"
+        fill="#F2EBDD"
+    />
+
+    <polygon
+        points="476.25,914.4 476.25,453.5583 811.4851,-82.93 833.0255,-69.47 501.65,460.8417 501.65,914.4"
+        fill="#F2EBDD"
+    />
+
+</g>
+
+
+</svg>

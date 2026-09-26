@@ -1,0 +1,130 @@
+OPERATIONAL WORLDS
+FIELD-0004 DIVERGENCE
+FABRICATION v0.2
+
+
+PANEL
+-----
+36 x 36 in
+
+914.400 x
+914.400 mm
+
+
+ARCHITECTURE
+------------
+Member width:
+
+19.050 mm
+0.750 in
+
+
+Proposed relief height:
+
+19.050 mm
+0.750 in
+
+
+FIELD-0004 PARAMETERS
+---------------------
+Stem centerline separation:
+
+63.500 mm
+2.500 in
+
+
+Branch angle:
+
+32.000 degrees
+
+
+Split Y:
+
+0.000 mm
+
+
+JUNCTION CONSTRUCTION
+---------------------
+Each side is represented by ONE continuous
+closed polygon.
+
+Stem and branch offsets meet through calculated
+miter intersections.
+
+There are:
+
+NO overlapping stem/branch polygons.
+
+NO triangular voids at the junction.
+
+NO stacked geometry at the junction.
+
+
+FABRICATION INTENT
+------------------
+The SVG is currently a fabrication geometry
+preview.
+
+Final CNC / machining package should use these
+closed boundaries directly or convert them to
+equivalent DXF closed polylines.
+
+
+FINISH INTENT
+-------------
+FIELD:
+
+Dark green.
+Smooth matte sprayed finish.
+
+Green finish continues across visible exterior
+panel sides.
+
+
+ARCHITECTURE:
+
+Warm white.
+Smooth matte sprayed finish.
+
+
+BACK:
+
+May remain unfinished unless required for
+dimensional stability or mounting.
+
+
+VISIBLE FABRICATION
+-------------------
+No exposed raw substrate.
+
+No visible fasteners.
+
+No adhesive squeeze-out.
+
+No visible seams from normal frontal viewing.
+
+
+QUOTE OPTIONS
+-------------
+Please quote separately:
+
+A.
+Raw / unfinished fabrication.
+
+B.
+Fabrication plus professional sprayed finish.
+
+
+Please recommend construction appropriate for:
+
+1.
+Economical prototype.
+
+2.
+Durable gallery-quality object.
+
+
+STATUS
+------
+FABRICATION STUDY v0.2
+Continuous miter geometry.

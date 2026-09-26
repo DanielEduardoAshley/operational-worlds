@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="406.4mm" height="508mm" viewBox="0 0 406.4 508">
+  <title>FIELD-0004 Divergence — 16 × 20 in</title>
+
+  <defs>
+    <clipPath id="field-clip-16x20">
+      <rect x="0" y="0" width="406.4" height="508" />
+    </clipPath>
+  </defs>
+
+  <rect x="0" y="0" width="406.4" height="508" fill="#062D20" />
+
+  <g clip-path="url(#field-clip-16x20)">
+  <line x1="171.45" y1="508" x2="171.45" y2="254" stroke="#F2EBDD" stroke-width="15.875" stroke-linecap="butt" stroke-linejoin="miter" />
+  <line x1="234.95" y1="508" x2="234.95" y2="254" stroke="#F2EBDD" stroke-width="15.875" stroke-linecap="butt" stroke-linejoin="miter" />
+  <line x1="171.45" y1="254" x2="-7.106" y2="-31.75" stroke="#F2EBDD" stroke-width="15.875" stroke-linecap="butt" stroke-linejoin="miter" />
+  <line x1="234.95" y1="254" x2="413.506" y2="-31.75" stroke="#F2EBDD" stroke-width="15.875" stroke-linecap="butt" stroke-linejoin="miter" />
+  </g>
+</svg>

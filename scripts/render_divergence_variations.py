@@ -1,0 +1,247 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+import bpy
+from mathutils import Vector
+
+
+# Canonical export order:
+# 01 = Wide
+# 02 = Default
+# 03 = Medium
+# 04 = Near Zero
+EXPORTS = [
+    (
+        "FIELD-0004_Divergence.007",
+        "01_Divergence_Wide.png",
+    ),
+    (
+        "FIELD-0004_Divergence",
+        "02_Divergence_Default.png",
+    ),
+    (
+        "FIELD-0004_Divergence.002",
+        "03_Divergence_Medium.png",
+    ),
+    (
+        "FIELD-0004_Divergence.001",
+        "04_Divergence_Near_Zero.png",
+    ),
+]
+
+RESOLUTION_X = 1600
+RESOLUTION_Y = 2000
+FRAME_MARGIN = 1.04
+
+OUTPUT_DIR = (
+    Path.cwd()
+    / "exports"
+    / "critique"
+    / "03_divergence_variations"
+)
+
+
+def world_bbox(obj):
+    return [
+        obj.matrix_world @ Vector(corner)
+        for corner in obj.bound_box
+    ]
+
+
+def bbox_center(obj):
+    pts = world_bbox(obj)
+
+    min_x = min(p.x for p in pts)
+    max_x = max(p.x for p in pts)
+    min_y = min(p.y for p in pts)
+    max_y = max(p.y for p in pts)
+    min_z = min(p.z for p in pts)
+    max_z = max(p.z for p in pts)
+
+    return Vector(
+        (
+            (min_x + max_x) / 2.0,
+            (min_y + max_y) / 2.0,
+            (min_z + max_z) / 2.0,
+        )
+    )
+
+
+def bbox_size(obj):
+    pts = world_bbox(obj)
+
+    min_x = min(p.x for p in pts)
+    max_x = max(p.x for p in pts)
+    min_y = min(p.y for p in pts)
+    max_y = max(p.y for p in pts)
+    min_z = min(p.z for p in pts)
+    max_z = max(p.z for p in pts)
+
+    return (
+        max_x - min_x,
+        max_y - min_y,
+        max_z - min_z,
+    )
+
+
+def ensure_camera():
+    camera = bpy.data.objects.get("OWDE_CRITIQUE_CAMERA")
+
+    if camera is None:
+        camera_data = bpy.data.cameras.new("OWDE_CRITIQUE_CAMERA_DATA")
+        camera = bpy.data.objects.new("OWDE_CRITIQUE_CAMERA", camera_data)
+        bpy.context.scene.collection.objects.link(camera)
+
+    camera.data.type = "ORTHO"
+    return camera
+
+
+def configure_world():
+    world = bpy.context.scene.world
+
+    if world is None:
+        world = bpy.data.worlds.new("OWDE_CRITIQUE_WORLD")
+        bpy.context.scene.world = world
+
+    world.use_nodes = True
+
+    background = world.node_tree.nodes.get("Background")
+
+    if background is not None:
+        background.inputs["Color"].default_value = (
+            0.80,
+            0.80,
+            0.80,
+            1.0,
+        )
+        background.inputs["Strength"].default_value = 0.35
+
+
+def disable_scene_lights():
+    for obj in bpy.context.scene.objects:
+        if obj.type == "LIGHT":
+            obj.hide_render = True
+
+
+def configure_render():
+    scene = bpy.context.scene
+
+    scene.render.resolution_x = RESOLUTION_X
+    scene.render.resolution_y = RESOLUTION_Y
+    scene.render.resolution_percentage = 100
+    scene.render.image_settings.file_format = "PNG"
+    scene.render.image_settings.color_mode = "RGBA"
+    scene.render.film_transparent = False
+
+
+def hide_all_except(target, camera):
+    for obj in bpy.context.scene.objects:
+        if obj == target:
+            obj.hide_render = False
+        elif obj == camera:
+            obj.hide_render = False
+        else:
+            obj.hide_render = True
+
+
+def available_divergence_objects():
+    return sorted(
+        obj.name
+        for obj in bpy.data.objects
+        if "FIELD-0004" in obj.name.upper()
+        or "DIVERGENCE" in obj.name.upper()
+    )
+
+
+def frame_object(camera, obj):
+    center = bbox_center(obj)
+    width, height, _depth = bbox_size(obj)
+    render_aspect = RESOLUTION_X / RESOLUTION_Y
+    vertical_from_height = height
+    vertical_from_width = width / render_aspect
+
+    camera.data.ortho_scale = (
+        max(
+            vertical_from_height,
+            vertical_from_width,
+        )
+        * FRAME_MARGIN
+    )
+
+    camera.location = (
+        center.x,
+        center.y,
+        center.z + 2.0,
+    )
+    camera.rotation_euler = (
+        0.0,
+        0.0,
+        0.0,
+    )
+    bpy.context.scene.camera = camera
+
+
+def main():
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
+    camera = ensure_camera()
+    configure_world()
+    configure_render()
+    disable_scene_lights()
+
+    scene = bpy.context.scene
+
+    print("")
+    print("Divergence export order:")
+    print("------------------------")
+
+    rendered = []
+
+    for index, (object_name, output_name) in enumerate(
+        EXPORTS,
+        start=1,
+    ):
+        obj = bpy.data.objects.get(object_name)
+
+        if obj is None:
+            print(
+                f"SKIP: {object_name} not found. "
+                f"Available divergence objects: {available_divergence_objects()}"
+            )
+            continue
+
+        print(
+            f"{index:02d}: "
+            f"{object_name} -> {output_name}"
+        )
+
+        hide_all_except(
+            obj,
+            camera,
+        )
+        frame_object(
+            camera,
+            obj,
+        )
+
+        output_path = OUTPUT_DIR / output_name
+        scene.render.filepath = str(output_path)
+
+        bpy.ops.render.render(write_still=True)
+        rendered.append(output_name)
+
+    print("")
+    print("Done.")
+    print("")
+    print("Exports:")
+
+    for filename in rendered:
+        print(
+            "  "
+            + str(OUTPUT_DIR / filename)
+        )
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<svg
+    xmlns="http://www.w3.org/2000/svg"
+    width="1016mm"
+    height="1016mm"
+    viewBox="0 0 1016 1016"
+>
+
+<title>
+FIELD-0004 Divergence
+40 x 40 in
+Architecture width 1.000 in
+</title>
+
+
+<defs>
+
+    <clipPath id="fieldClip">
+
+        <rect
+            x="0"
+            y="0"
+            width="1016"
+            height="1016"
+        />
+
+    </clipPath>
+
+</defs>
+
+
+<!-- FIELD -->
+
+<rect
+    x="0"
+    y="0"
+    width="1016"
+    height="1016"
+    fill="#062D20"
+/>
+
+
+<!-- ARCHITECTURE -->
+
+<g clip-path="url(#fieldClip)">
+
+    <polygon
+        points="463.55,1016 463.55,511.6417 100.4311,-69.47 121.9715,-82.93 488.95,504.3583 488.95,1016"
+        fill="#F2EBDD"
+    />
+
+    <polygon
+        points="527.05,1016 527.05,504.3583 894.0285,-82.93 915.5689,-69.47 552.45,511.6417 552.45,1016"
+        fill="#F2EBDD"
+    />
+
+</g>
+
+
+</svg>

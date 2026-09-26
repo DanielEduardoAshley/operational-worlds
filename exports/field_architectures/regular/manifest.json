@@ -1,0 +1,63 @@
+{
+  "system": "Operational Worlds Design Engine",
+  "exporter": "Field Architecture Standard Exporter",
+  "export_version": "0.1.0",
+  "preset": "REGULAR",
+  "resolution": {
+    "width_px": 1600,
+    "height_px": 2000
+  },
+  "margin_ratio": 0.025,
+  "fields": [
+    {
+      "field_id": "FIELD-0001",
+      "name": "Division",
+      "file": "FIELD-0001_Division_REGULAR.png",
+      "width_px": 1600,
+      "height_px": 2000
+    },
+    {
+      "field_id": "FIELD-0002",
+      "name": "Intersection",
+      "file": "FIELD-0002_Intersection_REGULAR.png",
+      "width_px": 1600,
+      "height_px": 2000
+    },
+    {
+      "field_id": "FIELD-0003",
+      "name": "Bottleneck",
+      "file": "FIELD-0003_Bottleneck_REGULAR.png",
+      "width_px": 1600,
+      "height_px": 2000
+    },
+    {
+      "field_id": "FIELD-0004",
+      "name": "Divergence",
+      "file": "FIELD-0004_Divergence_REGULAR.png",
+      "width_px": 1600,
+      "height_px": 2000
+    },
+    {
+      "field_id": "FIELD-0005",
+      "name": "Nested_Zones",
+      "file": "FIELD-0005_Nested_Zones_REGULAR.png",
+      "width_px": 1600,
+      "height_px": 2000
+    },
+    {
+      "field_id": "FIELD-0006",
+      "name": "Offset_Zones",
+      "file": "FIELD-0006_Offset_Zones_REGULAR.png",
+      "width_px": 1600,
+      "height_px": 2000
+    },
+    {
+      "field_id": "FIELD-0007",
+      "name": "Terminal_Target",
+      "file": "FIELD-0007_Terminal_Target_REGULAR.png",
+      "width_px": 1600,
+      "height_px": 2000
+    }
+  ],
+  "missing": []
+}

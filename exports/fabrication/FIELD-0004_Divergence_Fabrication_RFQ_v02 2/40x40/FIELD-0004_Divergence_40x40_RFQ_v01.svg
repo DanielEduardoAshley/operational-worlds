@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg
+ xmlns="http://www.w3.org/2000/svg"
+ width="1016mm"
+ height="1016mm"
+ viewBox="0 0 1016 1016">
+
+<title>
+Operational Worlds —
+FIELD-0004 Divergence —
+40 x 40 in
+</title>
+
+<defs>
+ <clipPath id="fieldClip">
+  <rect
+   x="0"
+   y="0"
+   width="1016"
+   height="1016"/>
+ </clipPath>
+</defs>
+
+<!-- PANEL / FIELD -->
+<rect
+ x="0"
+ y="0"
+ width="1016"
+ height="1016"
+ fill="#062D20"/>
+
+<!-- RAISED ARCHITECTURE -->
+<g clip-path="url(#fieldClip)">
+ <polygon
+  points="460.375,1016 460.375,512.5521 85.8348,-86.8375 112.7603,-103.6625 492.125,503.4479 492.125,1016"
+  fill="#F2EBDD"/>
+ <polygon
+  points="523.875,1016 523.875,503.4479 903.2397,-103.6625 930.1652,-86.8375 555.625,512.5521 555.625,1016"
+  fill="#F2EBDD"/>
+</g>
+
+</svg>

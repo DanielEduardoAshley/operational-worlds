@@ -1,0 +1,58 @@
+OPERATIONAL WORLDS
+FIELD-0004 DIVERGENCE
+
+40 x 40 LARGE-FORMAT WIDTH STUDY
+
+
+FIELD
+-----
+40 x 40 in
+
+1016 x 1016 mm
+
+
+ARCHITECTURE WIDTH
+------------------
+1.250 in
+
+31.750 mm
+
+
+ARCHITECTURE WIDTH /
+FIELD WIDTH
+-----------
+3.125%
+
+
+LOCKED PARAMETERS
+-----------------
+Stem centerline separation:
+
+2.500 in
+63.500 mm
+
+
+Branch angle:
+
+32 degrees
+
+
+Split Y:
+
+0 mm
+
+
+GEOMETRY
+--------
+Continuous mitered polygons.
+
+No overlapping junction geometry.
+
+No triangular junction gaps.
+
+
+PURPOSE
+-------
+Controlled large-format width study.
+
+Only architectural member width changes.

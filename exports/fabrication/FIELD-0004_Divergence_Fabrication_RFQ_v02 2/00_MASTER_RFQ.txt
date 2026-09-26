@@ -1,0 +1,181 @@
+OPERATIONAL WORLDS
+FIELD-0004 — DIVERGENCE
+
+FABRICATION REQUEST FOR QUOTE
+RFQ v0.1
+
+
+PROJECT
+=======
+
+FIELD-0004 Divergence is a wall-mounted
+relief surface consisting of a flat field
+with two raised architectural members.
+
+The attached vector files define the
+front-view geometry.
+
+
+PLEASE QUOTE THESE FOUR SIZES
+=============================
+
+16 x 20 in | member 0.75 in | relief 0.75 in
+18 x 24 in | member 0.75 in | relief 0.75 in
+36 x 36 in | member 1.25 in | relief 0.75 in
+40 x 40 in | member 1.25 in | relief 0.75 in
+
+
+PLEASE PROVIDE TWO QUOTES PER SIZE
+==================================
+
+OPTION A
+Fabrication only / unfinished.
+
+OPTION B
+Complete fabrication with professional
+sprayed gallery-ready finish.
+
+
+CONSTRUCTION
+============
+
+Please recommend a stable construction
+method appropriate to each scale.
+
+Possible methods may include CNC-cut
+sheet material, built-up panel construction,
+or another method the fabricator considers
+more appropriate.
+
+Material is intentionally not being locked
+for this RFQ.
+
+Priorities are:
+
+- dimensional stability
+- clean planar field
+- crisp raised geometry
+- clean miter junctions
+- durable gallery-quality construction
+- reasonable weight
+- clean wall presentation
+
+
+RELIEF
+======
+
+Proposed architecture relief:
+
+0.750 in / 19.05 mm above field.
+
+Please identify if another construction
+depth would materially reduce cost,
+weight, or fabrication difficulty while
+maintaining a similar visual presence.
+
+
+FINISH
+======
+
+Field:
+deep dark green.
+
+Architecture:
+warm/off white.
+
+Finish:
+smooth matte sprayed finish.
+
+The dark-green field color should continue
+around the visible exterior sides of the
+panel.
+
+Back may remain unfinished unless sealing
+is recommended for stability.
+
+No exposed raw substrate should be visible
+when installed.
+
+
+SURFACE CHARACTER
+=================
+
+The desired object should read as a
+precisely fabricated architectural relief,
+not as hand-painted dimensional decoration.
+
+Edges should remain clean.
+
+Raised members should appear continuous.
+
+The central transition between vertical
+stem and diagonal branch should have no
+visible gap, overlap, or seam.
+
+
+INSTALLATION
+============
+
+Please recommend concealed wall-mounting
+hardware appropriate to the finished weight.
+
+Please identify:
+
+- estimated finished weight
+- recommended mounting system
+- wall clearance, if any
+
+
+QUOTE REQUEST
+=============
+
+For each size please include:
+
+- fabrication cost unfinished
+- fabrication + finish cost
+- proposed material/construction
+- estimated finished weight
+- lead time
+- mounting recommendation
+- shipping/delivery cost if applicable
+
+
+FILES
+=====
+
+Each size folder contains:
+
+- production-scale SVG
+- dimensional/specification TXT file
+
+All SVG dimensions are expressed in
+millimetres and contain closed architectural
+polygons.
+
+
+DESIGN STATUS
+=============
+
+FIELD-0004 geometry:
+LOCKED FOR RFQ
+
+Member widths:
+LOCKED FOR RFQ
+
+16 x 20:
+0.750 in
+
+18 x 24:
+0.750 in
+
+36 x 36:
+1.250 in
+
+40 x 40:
+1.250 in
+
+Relief height:
+PROVISIONAL — 0.750 in
+
+Material/construction:
+FABRICATOR RECOMMENDATION REQUESTED

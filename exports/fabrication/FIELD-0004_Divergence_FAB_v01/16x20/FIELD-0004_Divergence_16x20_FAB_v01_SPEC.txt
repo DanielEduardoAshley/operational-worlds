@@ -1,0 +1,122 @@
+OPERATIONAL WORLDS
+FIELD-0004 DIVERGENCE
+FABRICATION v0.1
+
+
+PANEL
+-----
+16 x 20 in
+
+406.400 x
+508.000 mm
+
+
+ARCHITECTURE
+------------
+Width:
+
+19.050 mm
+0.750 in
+
+
+Proposed relief height:
+
+19.050 mm
+0.750 in
+
+
+OPERATIONAL PARAMETERS
+----------------------
+Stem width:
+
+63.500 mm
+2.500 in
+
+
+Branch angle:
+
+32.000 degrees
+
+
+Split Y:
+
+0.000 mm
+
+
+GEOMETRY
+--------
+Architecture is represented as filled polygons.
+
+Stem and branch polygons intentionally overlap
+at the Divergence junction.
+
+Final fabrication geometry should be Boolean
+unioned into continuous closed architecture
+before CNC / machining export.
+
+
+FINISH INTENT
+-------------
+FIELD:
+
+Dark green.
+Smooth matte sprayed finish.
+
+Field finish continues across:
+- top field surface
+- left exterior side
+- right exterior side
+- top exterior side
+- bottom exterior side
+
+
+ARCHITECTURE:
+
+Warm white.
+Smooth matte sprayed finish.
+
+
+BACK:
+
+May remain unfinished unless required for
+dimensional stability.
+
+Back should remain flat and suitable for mounting.
+
+
+VISIBLE FABRICATION:
+
+No exposed raw substrate.
+
+No visible fasteners.
+
+No adhesive squeeze-out.
+
+No unfinished seams when viewed from the
+front or exterior sides.
+
+
+QUOTE REQUEST
+-------------
+Please quote separately:
+
+A.
+Raw / unfinished fabrication.
+
+B.
+Fabrication plus professional sprayed finish.
+
+Please recommend material / construction for:
+
+1.
+Economical prototype fabrication.
+
+2.
+Durable gallery-quality fabrication.
+
+
+STATUS
+------
+FABRICATION STUDY v0.1
+
+Not yet final CNC geometry.

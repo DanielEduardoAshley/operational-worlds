@@ -1,0 +1,902 @@
+#!/usr/bin/env python3
+"""FIELD-0004 Divergence — Fabrication v0.2.
+
+Creates continuous, mitered Divergence architecture.
+
+KEY CHANGE FROM v0.1
+--------------------
+Each side of Divergence is ONE continuous polygon:
+
+    bottom
+      |
+      |
+      |
+      + diagonal
+         /
+        /
+       /
+
+There are no overlapping stem/branch polygons.
+
+Therefore:
+
+    - no triangular green gap
+    - no white overlap diamond
+    - no stacked geometry at the junction
+
+The centerline still follows the canonical FIELD-0004 logic.
+
+Fabrication architecture:
+
+    width  = 0.750 in / 19.05 mm
+    height = 0.750 in / 19.05 mm
+
+Generated sizes:
+
+    16 x 20 in
+    18 x 24 in
+    36 x 36 in
+    40 x 40 in
+
+This does NOT modify the canonical field builder.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from math import cos, radians, sin
+from pathlib import Path
+
+
+# ============================================================
+# CONSTANTS
+# ============================================================
+
+INCH_MM = 25.4
+
+ROOT = Path(__file__).resolve().parents[1]
+
+EXPORT_ROOT = (
+    ROOT
+    / "exports"
+    / "fabrication"
+    / "FIELD-0004_Divergence_FAB_v02"
+)
+
+
+# ============================================================
+# FABRICATION MEMBER
+# ============================================================
+
+ARCHITECTURE_WIDTH_MM = 0.750 * INCH_MM
+ARCHITECTURE_HEIGHT_MM = 0.750 * INCH_MM
+
+
+# ============================================================
+# FIELD-0004 PARAMETERS
+# ============================================================
+
+STEM_WIDTH_MM = 2.500 * INCH_MM
+
+BRANCH_ANGLE_DEG = 32.0
+
+SPLIT_Y_MM = 0.0
+
+
+# ============================================================
+# COLORS — PREVIEW ONLY
+# ============================================================
+
+FIELD_COLOR = "#062D20"
+
+ARCHITECTURE_COLOR = "#F2EBDD"
+
+
+# ============================================================
+# PANELS
+# ============================================================
+
+@dataclass(frozen=True)
+class Panel:
+
+    slug: str
+
+    width_in: float
+    height_in: float
+
+    @property
+    def width_mm(self) -> float:
+        return self.width_in * INCH_MM
+
+    @property
+    def height_mm(self) -> float:
+        return self.height_in * INCH_MM
+
+
+PANELS = (
+
+    Panel(
+        slug="16x20",
+        width_in=16.0,
+        height_in=20.0,
+    ),
+
+    Panel(
+        slug="18x24",
+        width_in=18.0,
+        height_in=24.0,
+    ),
+
+    Panel(
+        slug="36x36",
+        width_in=36.0,
+        height_in=36.0,
+    ),
+
+    Panel(
+        slug="40x40",
+        width_in=40.0,
+        height_in=40.0,
+    ),
+)
+
+
+# ============================================================
+# BASIC HELPERS
+# ============================================================
+
+def fmt(value: float) -> str:
+
+    return (
+        f"{value:.4f}"
+        .rstrip("0")
+        .rstrip(".")
+    )
+
+
+def svg_point(
+    x: float,
+    y: float,
+    field_width: float,
+    field_height: float,
+):
+
+    return (
+        x + field_width / 2.0,
+        field_height / 2.0 - y,
+    )
+
+
+def polygon_string(
+    points,
+    field_width,
+    field_height,
+):
+
+    result = []
+
+    for x, y in points:
+
+        sx, sy = svg_point(
+            x,
+            y,
+            field_width,
+            field_height,
+        )
+
+        result.append(
+            f"{fmt(sx)},{fmt(sy)}"
+        )
+
+    return " ".join(result)
+
+
+# ============================================================
+# VECTOR HELPERS
+# ============================================================
+
+def line_intersection(
+    p1,
+    d1,
+    p2,
+    d2,
+):
+    """Intersection of two infinite 2D lines.
+
+    Line 1:
+        p1 + t*d1
+
+    Line 2:
+        p2 + u*d2
+
+    Returns the intersection point.
+    """
+
+    x1, y1 = p1
+    dx1, dy1 = d1
+
+    x2, y2 = p2
+    dx2, dy2 = d2
+
+    cross = (
+        dx1 * dy2
+        - dy1 * dx2
+    )
+
+    if abs(cross) < 1e-9:
+        raise ValueError(
+            "cannot intersect parallel lines"
+        )
+
+    rx = x2 - x1
+    ry = y2 - y1
+
+    t = (
+        rx * dy2
+        - ry * dx2
+    ) / cross
+
+    return (
+        x1 + t * dx1,
+        y1 + t * dy1,
+    )
+
+
+# ============================================================
+# CONTINUOUS SIDE POLYGON
+# ============================================================
+
+def build_side_polygon(
+    *,
+    stem_x: float,
+    split_y: float,
+    branch_top_x: float,
+    branch_top_y: float,
+    bottom_y: float,
+    width_mm: float,
+):
+    """Build one continuous stem-to-branch architectural polygon.
+
+    The centerline consists of two connected segments:
+
+        stem:
+            (stem_x, bottom_y)
+                ->
+            (stem_x, split_y)
+
+        branch:
+            (stem_x, split_y)
+                ->
+            (branch_top_x, branch_top_y)
+
+    We offset both centerline segments on both sides and intersect
+    those offset lines at the bend.
+
+    This creates a true mitered architectural member rather than
+    overlapping rectangles.
+    """
+
+    half = width_mm / 2.0
+
+
+    # --------------------------------------------------------
+    # STEM DIRECTION
+    # --------------------------------------------------------
+
+    stem_dir = (
+        0.0,
+        1.0,
+    )
+
+    # Perpendicular to vertical stem.
+    stem_normal = (
+        -1.0,
+        0.0,
+    )
+
+
+    # --------------------------------------------------------
+    # BRANCH DIRECTION
+    # --------------------------------------------------------
+
+    branch_dx = (
+        branch_top_x
+        - stem_x
+    )
+
+    branch_dy = (
+        branch_top_y
+        - split_y
+    )
+
+    branch_length = (
+        branch_dx * branch_dx
+        + branch_dy * branch_dy
+    ) ** 0.5
+
+    if branch_length <= 0:
+        raise ValueError(
+            "branch must have positive length"
+        )
+
+    branch_dir = (
+        branch_dx / branch_length,
+        branch_dy / branch_length,
+    )
+
+    # Left-hand perpendicular to branch direction.
+    branch_normal = (
+        -branch_dir[1],
+        branch_dir[0],
+    )
+
+
+    # --------------------------------------------------------
+    # STEM OFFSET LINES
+    # --------------------------------------------------------
+
+    stem_left_bottom = (
+        stem_x
+        + stem_normal[0] * half,
+        bottom_y
+        + stem_normal[1] * half,
+    )
+
+    stem_right_bottom = (
+        stem_x
+        - stem_normal[0] * half,
+        bottom_y
+        - stem_normal[1] * half,
+    )
+
+
+    stem_left_at_split = (
+        stem_x
+        + stem_normal[0] * half,
+        split_y
+        + stem_normal[1] * half,
+    )
+
+    stem_right_at_split = (
+        stem_x
+        - stem_normal[0] * half,
+        split_y
+        - stem_normal[1] * half,
+    )
+
+
+    # --------------------------------------------------------
+    # BRANCH OFFSET LINES
+    # --------------------------------------------------------
+
+    branch_left_at_split = (
+        stem_x
+        + branch_normal[0] * half,
+        split_y
+        + branch_normal[1] * half,
+    )
+
+    branch_right_at_split = (
+        stem_x
+        - branch_normal[0] * half,
+        split_y
+        - branch_normal[1] * half,
+    )
+
+
+    branch_left_top = (
+        branch_top_x
+        + branch_normal[0] * half,
+        branch_top_y
+        + branch_normal[1] * half,
+    )
+
+    branch_right_top = (
+        branch_top_x
+        - branch_normal[0] * half,
+        branch_top_y
+        - branch_normal[1] * half,
+    )
+
+
+    # --------------------------------------------------------
+    # TRUE MITER INTERSECTIONS
+    #
+    # Intersect the corresponding offset lines.
+    #
+    # This is the key operation that removes BOTH:
+    #
+    #   gap artifacts
+    #   overlap artifacts
+    # --------------------------------------------------------
+
+    miter_left = line_intersection(
+        stem_left_at_split,
+        stem_dir,
+        branch_left_at_split,
+        branch_dir,
+    )
+
+    miter_right = line_intersection(
+        stem_right_at_split,
+        stem_dir,
+        branch_right_at_split,
+        branch_dir,
+    )
+
+
+    # --------------------------------------------------------
+    # CONTINUOUS CLOSED POLYGON
+    #
+    # Travel:
+    #
+    # stem left bottom
+    #       ->
+    # left miter
+    #       ->
+    # branch left top
+    #       ->
+    # branch right top
+    #       ->
+    # right miter
+    #       ->
+    # stem right bottom
+    #       ->
+    # close
+    # --------------------------------------------------------
+
+    return (
+
+        stem_left_bottom,
+
+        miter_left,
+
+        branch_left_top,
+
+        branch_right_top,
+
+        miter_right,
+
+        stem_right_bottom,
+    )
+
+
+# ============================================================
+# FIELD GEOMETRY
+# ============================================================
+
+def build_geometry(panel: Panel):
+
+    width = panel.width_mm
+    height = panel.height_mm
+
+    bottom_y = -height / 2.0
+    top_y = height / 2.0
+
+    half_stem = STEM_WIDTH_MM / 2.0
+
+    left_stem_x = -half_stem
+    right_stem_x = half_stem
+
+
+    # --------------------------------------------------------
+    # BRANCH GEOMETRY
+    # --------------------------------------------------------
+
+    angle = radians(
+        BRANCH_ANGLE_DEG
+    )
+
+    # Extend branch centerline above panel.
+    # SVG clipping produces a flush termination.
+
+    overshoot_y = (
+        ARCHITECTURE_WIDTH_MM
+        * 3.0
+    )
+
+    branch_top_y = (
+        top_y
+        + overshoot_y
+    )
+
+    vertical_run = (
+        branch_top_y
+        - SPLIT_Y_MM
+    )
+
+    horizontal_run = (
+        sin(angle)
+        / cos(angle)
+        * vertical_run
+    )
+
+
+    left_branch_top_x = (
+        left_stem_x
+        - horizontal_run
+    )
+
+    right_branch_top_x = (
+        right_stem_x
+        + horizontal_run
+    )
+
+
+    # --------------------------------------------------------
+    # BUILD LEFT SIDE
+    # --------------------------------------------------------
+
+    left = build_side_polygon(
+
+        stem_x=left_stem_x,
+
+        split_y=SPLIT_Y_MM,
+
+        branch_top_x=left_branch_top_x,
+
+        branch_top_y=branch_top_y,
+
+        bottom_y=bottom_y,
+
+        width_mm=ARCHITECTURE_WIDTH_MM,
+    )
+
+
+    # --------------------------------------------------------
+    # BUILD RIGHT SIDE
+    # --------------------------------------------------------
+
+    right = build_side_polygon(
+
+        stem_x=right_stem_x,
+
+        split_y=SPLIT_Y_MM,
+
+        branch_top_x=right_branch_top_x,
+
+        branch_top_y=branch_top_y,
+
+        bottom_y=bottom_y,
+
+        width_mm=ARCHITECTURE_WIDTH_MM,
+    )
+
+
+    return (
+        left,
+        right,
+    )
+
+
+# ============================================================
+# SVG
+# ============================================================
+
+def make_svg(panel: Panel) -> str:
+
+    width = panel.width_mm
+    height = panel.height_mm
+
+    left, right = build_geometry(
+        panel
+    )
+
+
+    left_points = polygon_string(
+        left,
+        width,
+        height,
+    )
+
+    right_points = polygon_string(
+        right,
+        width,
+        height,
+    )
+
+
+    return f'''<?xml version="1.0" encoding="UTF-8"?>
+
+<svg
+    xmlns="http://www.w3.org/2000/svg"
+    width="{fmt(width)}mm"
+    height="{fmt(height)}mm"
+    viewBox="0 0 {fmt(width)} {fmt(height)}"
+>
+
+<title>
+FIELD-0004 Divergence
+{panel.width_in:g} x {panel.height_in:g} in
+Fabrication v0.2
+</title>
+
+
+<defs>
+
+    <clipPath id="fieldClip">
+
+        <rect
+            x="0"
+            y="0"
+            width="{fmt(width)}"
+            height="{fmt(height)}"
+        />
+
+    </clipPath>
+
+</defs>
+
+
+<!-- FIELD -->
+
+<rect
+    x="0"
+    y="0"
+    width="{fmt(width)}"
+    height="{fmt(height)}"
+    fill="{FIELD_COLOR}"
+/>
+
+
+<!--
+    ARCHITECTURE
+
+    Two continuous closed polygons.
+
+    Each polygon contains its own stem + diagonal branch.
+    No overlapping geometry exists at the bend.
+-->
+
+<g clip-path="url(#fieldClip)">
+
+    <polygon
+        points="{left_points}"
+        fill="{ARCHITECTURE_COLOR}"
+    />
+
+    <polygon
+        points="{right_points}"
+        fill="{ARCHITECTURE_COLOR}"
+    />
+
+</g>
+
+
+</svg>
+'''
+
+
+# ============================================================
+# SPECIFICATION REPORT
+# ============================================================
+
+def make_report(panel: Panel) -> str:
+
+    return f"""OPERATIONAL WORLDS
+FIELD-0004 DIVERGENCE
+FABRICATION v0.2
+
+
+PANEL
+-----
+{panel.width_in:g} x {panel.height_in:g} in
+
+{panel.width_mm:.3f} x
+{panel.height_mm:.3f} mm
+
+
+ARCHITECTURE
+------------
+Member width:
+
+{ARCHITECTURE_WIDTH_MM:.3f} mm
+0.750 in
+
+
+Proposed relief height:
+
+{ARCHITECTURE_HEIGHT_MM:.3f} mm
+0.750 in
+
+
+FIELD-0004 PARAMETERS
+---------------------
+Stem centerline separation:
+
+{STEM_WIDTH_MM:.3f} mm
+2.500 in
+
+
+Branch angle:
+
+{BRANCH_ANGLE_DEG:.3f} degrees
+
+
+Split Y:
+
+{SPLIT_Y_MM:.3f} mm
+
+
+JUNCTION CONSTRUCTION
+---------------------
+Each side is represented by ONE continuous
+closed polygon.
+
+Stem and branch offsets meet through calculated
+miter intersections.
+
+There are:
+
+NO overlapping stem/branch polygons.
+
+NO triangular voids at the junction.
+
+NO stacked geometry at the junction.
+
+
+FABRICATION INTENT
+------------------
+The SVG is currently a fabrication geometry
+preview.
+
+Final CNC / machining package should use these
+closed boundaries directly or convert them to
+equivalent DXF closed polylines.
+
+
+FINISH INTENT
+-------------
+FIELD:
+
+Dark green.
+Smooth matte sprayed finish.
+
+Green finish continues across visible exterior
+panel sides.
+
+
+ARCHITECTURE:
+
+Warm white.
+Smooth matte sprayed finish.
+
+
+BACK:
+
+May remain unfinished unless required for
+dimensional stability or mounting.
+
+
+VISIBLE FABRICATION
+-------------------
+No exposed raw substrate.
+
+No visible fasteners.
+
+No adhesive squeeze-out.
+
+No visible seams from normal frontal viewing.
+
+
+QUOTE OPTIONS
+-------------
+Please quote separately:
+
+A.
+Raw / unfinished fabrication.
+
+B.
+Fabrication plus professional sprayed finish.
+
+
+Please recommend construction appropriate for:
+
+1.
+Economical prototype.
+
+2.
+Durable gallery-quality object.
+
+
+STATUS
+------
+FABRICATION STUDY v0.2
+Continuous miter geometry.
+"""
+
+
+# ============================================================
+# EXPORT
+# ============================================================
+
+def main():
+
+    EXPORT_ROOT.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    print()
+    print(
+        "FIELD-0004 DIVERGENCE"
+    )
+
+    print(
+        "FABRICATION v0.2"
+    )
+
+    print()
+
+    print(
+        "Architecture:"
+        f" {ARCHITECTURE_WIDTH_MM:.3f}"
+        " mm wide x"
+        f" {ARCHITECTURE_HEIGHT_MM:.3f}"
+        " mm high"
+    )
+
+    print()
+
+    for panel in PANELS:
+
+        folder = (
+            EXPORT_ROOT
+            / panel.slug
+        )
+
+        folder.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
+        prefix = (
+            "FIELD-0004_Divergence_"
+            f"{panel.slug}_FAB_v02"
+        )
+
+
+        svg_path = (
+            folder
+            / f"{prefix}.svg"
+        )
+
+        spec_path = (
+            folder
+            / f"{prefix}_SPEC.txt"
+        )
+
+
+        svg_path.write_text(
+            make_svg(panel),
+            encoding="utf-8",
+        )
+
+        spec_path.write_text(
+            make_report(panel),
+            encoding="utf-8",
+        )
+
+
+        print(
+            f"{panel.width_in:g}"
+            " x "
+            f"{panel.height_in:g}"
+            " in"
+        )
+
+        print(
+            "  SVG: "
+            f"{svg_path.relative_to(ROOT)}"
+        )
+
+        print(
+            "  SPEC: "
+            f"{spec_path.relative_to(ROOT)}"
+        )
+
+        print()
+
+
+if __name__ == "__main__":
+    main()

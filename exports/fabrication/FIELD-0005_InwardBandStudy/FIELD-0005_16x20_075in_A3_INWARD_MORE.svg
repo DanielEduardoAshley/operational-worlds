@@ -1,0 +1,152 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<svg
+    xmlns="http://www.w3.org/2000/svg"
+    width="406.4mm"
+    height="508mm"
+    viewBox="0 0 406.4 508"
+>
+
+<title>
+FIELD-0005 Nested Zones — A3 — Inward More
+</title>
+
+<!-- FIELD -->
+
+<rect
+    x="0"
+    y="0"
+    width="406.4"
+    height="508"
+    fill="#062D20"
+/>
+
+
+<!-- ARCHITECTURE -->
+
+<g>
+
+    <line
+        x1="45.7"
+        y1="456.5"
+        x2="360.7"
+        y2="456.5"
+        stroke="#F2EBDD"
+        stroke-width="19.05"
+        stroke-linecap="square"
+        stroke-linejoin="miter"
+    />
+    <line
+        x1="360.7"
+        y1="456.5"
+        x2="360.7"
+        y2="51.5"
+        stroke="#F2EBDD"
+        stroke-width="19.05"
+        stroke-linecap="square"
+        stroke-linejoin="miter"
+    />
+    <line
+        x1="360.7"
+        y1="51.5"
+        x2="45.7"
+        y2="51.5"
+        stroke="#F2EBDD"
+        stroke-width="19.05"
+        stroke-linecap="square"
+        stroke-linejoin="miter"
+    />
+    <line
+        x1="45.7"
+        y1="51.5"
+        x2="45.7"
+        y2="456.5"
+        stroke="#F2EBDD"
+        stroke-width="19.05"
+        stroke-linecap="square"
+        stroke-linejoin="miter"
+    />
+    <line
+        x1="100.7"
+        y1="391.5"
+        x2="305.7"
+        y2="391.5"
+        stroke="#F2EBDD"
+        stroke-width="19.05"
+        stroke-linecap="square"
+        stroke-linejoin="miter"
+    />
+    <line
+        x1="305.7"
+        y1="391.5"
+        x2="305.7"
+        y2="116.5"
+        stroke="#F2EBDD"
+        stroke-width="19.05"
+        stroke-linecap="square"
+        stroke-linejoin="miter"
+    />
+    <line
+        x1="305.7"
+        y1="116.5"
+        x2="100.7"
+        y2="116.5"
+        stroke="#F2EBDD"
+        stroke-width="19.05"
+        stroke-linecap="square"
+        stroke-linejoin="miter"
+    />
+    <line
+        x1="100.7"
+        y1="116.5"
+        x2="100.7"
+        y2="391.5"
+        stroke="#F2EBDD"
+        stroke-width="19.05"
+        stroke-linecap="square"
+        stroke-linejoin="miter"
+    />
+    <line
+        x1="145.7"
+        y1="354.5"
+        x2="260.7"
+        y2="354.5"
+        stroke="#F2EBDD"
+        stroke-width="19.05"
+        stroke-linecap="square"
+        stroke-linejoin="miter"
+    />
+    <line
+        x1="260.7"
+        y1="354.5"
+        x2="260.7"
+        y2="209.5"
+        stroke="#F2EBDD"
+        stroke-width="19.05"
+        stroke-linecap="square"
+        stroke-linejoin="miter"
+    />
+    <line
+        x1="260.7"
+        y1="209.5"
+        x2="145.7"
+        y2="209.5"
+        stroke="#F2EBDD"
+        stroke-width="19.05"
+        stroke-linecap="square"
+        stroke-linejoin="miter"
+    />
+    <line
+        x1="145.7"
+        y1="209.5"
+        x2="145.7"
+        y2="354.5"
+        stroke="#F2EBDD"
+        stroke-width="19.05"
+        stroke-linecap="square"
+        stroke-linejoin="miter"
+    />
+
+</g>
+
+</svg>

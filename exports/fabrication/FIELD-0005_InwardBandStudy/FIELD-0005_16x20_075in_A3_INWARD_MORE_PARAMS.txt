@@ -1,0 +1,52 @@
+FIELD-0005 NESTED ZONES
+INWARD-BAND STUDY
+
+VARIANT
+-------
+A3 — Inward More
+
+
+FIELD
+-----
+406.4 x 508.0 mm
+16 x 20 in
+
+
+ARCHITECTURE WIDTH
+------------------
+19.05 mm
+0.750 in
+
+LOCKED
+
+
+OUTER
+-----
+315.000 x
+405.000 mm
+
+
+MIDDLE
+------
+205.000 x
+275.000 mm
+
+
+INNER
+-----
+115.000 x
+145.000 mm
+
+Y offset:
+-28.000 mm
+
+INNER GEOMETRY IS LOCKED.
+
+
+PURPOSE
+-------
+Only the outer and middle architectural bands
+change between variants.
+
+The inner zone remains identical in size,
+position, and line width.

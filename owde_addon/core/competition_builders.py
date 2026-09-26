@@ -26,9 +26,10 @@ GATE_MEMBER_MM = 0.30 * INCH_MM
 
 NET_LENGTH_MM = 6.0 * INCH_MM
 NET_HEIGHT_MM = 2.5 * INCH_MM
-NET_DEPTH_MM = 0.35 * INCH_MM
+NET_DEPTH_MM = 1.50 * INCH_MM
 NET_FRAME_MM = 0.30 * INCH_MM
 NET_GRID_MEMBER_MM = 0.10 * INCH_MM
+NET_TOP_MESH_THICKNESS_MM = 1.5
 
 
 def _combine(meshes: Iterable[MeshData]) -> MeshData:
@@ -183,9 +184,9 @@ def build_net_mesh(
     rows: int = 4,
     woven_depth: bool = True,
     top_mesh: bool = True,
-    top_mesh_thickness_mm: float = 0.8,
-    top_mesh_member_mm: float = 0.9,
-    top_mesh_openings: int = 8,
+    top_mesh_thickness_mm: float = NET_TOP_MESH_THICKNESS_MM,
+    top_mesh_member_mm: float = 2.2,
+    top_mesh_openings: int = 7,
 ) -> MeshData:
     """Build COMP-0003 Net.
 
@@ -270,7 +271,12 @@ def build_net_mesh(
     # TOP MEMBER
     #
     # Solid when Top Mesh is OFF.
-    # Open grille when Top Mesh is ON.
+    #
+    # When Top Mesh is ON, build a true horizontal plan-view
+    # lattice slightly proud of the structural frame.
+    #
+    # This makes NET remain legible from strict orthographic
+    # top view rather than collapsing into a thin line.
     # --------------------------------------------------------
 
     if not top_mesh:
@@ -290,81 +296,99 @@ def build_net_mesh(
 
     else:
 
-        # Top grille occupies exactly the same overall envelope as
-        # the old solid top rail.
-        top_z = height_mm - frame_mm / 2.0
-
-        # Keep a narrow continuous rail at the front and rear edges.
-        #
-        # These make the object still read as a strong horizontal
-        # beam from level view.
-        edge_rail_depth = min(
-            max(top_mesh_member_mm, 0.8),
-            depth_mm * 0.28,
+        # Structural top frame remains slightly below the
+        # visible plan-view grille.
+        structural_z = (
+            height_mm
+            - frame_mm
+            + top_mesh_thickness_mm / 2.0
         )
 
+        # Raise the plan lattice slightly above the nominal
+        # Net height. This prevents coincident/copanar surfaces
+        # and gives the orthographic camera an unambiguous mesh.
+        plan_z = (
+            height_mm
+            + top_mesh_thickness_mm / 2.0
+        )
+
+        # ----------------------------------------------------
+        # PLAN-VIEW OUTER FRAME
+        # ----------------------------------------------------
+
+        edge_depth = min(
+            max(top_mesh_member_mm, 1.2),
+            depth_mm * 0.22,
+        )
+
+        # Front rail.
         meshes.append(
             _box(
                 length_mm,
-                edge_rail_depth,
-                frame_mm,
+                edge_depth,
+                top_mesh_thickness_mm,
                 (
-                    0.0,
-                    -depth_mm / 2.0 + edge_rail_depth / 2.0,
-                    top_z,
+                  0.0,
+                    -depth_mm / 2.0 + edge_depth / 2.0,
+                    plan_z,
                 ),
             )
         )
 
+        # Rear rail.
         meshes.append(
             _box(
                 length_mm,
-                edge_rail_depth,
-                frame_mm,
+                edge_depth,
+                top_mesh_thickness_mm,
                 (
                     0.0,
-                    depth_mm / 2.0 - edge_rail_depth / 2.0,
-                    top_z,
+                    depth_mm / 2.0 - edge_depth / 2.0,
+                    plan_z,
                 ),
             )
         )
 
-        # End caps close the grille at left/right.
+        # Left end.
         meshes.append(
             _box(
-                frame_mm,
+                top_mesh_member_mm,
                 depth_mm,
-                frame_mm,
+                top_mesh_thickness_mm,
                 (
-                    -length_mm / 2.0 + frame_mm / 2.0,
+                    -length_mm / 2.0
+                    + top_mesh_member_mm / 2.0,
                     0.0,
-                    top_z,
+                    plan_z,
                 ),
             )
         )
 
+        # Right end.
         meshes.append(
             _box(
-                frame_mm,
+                top_mesh_member_mm,
                 depth_mm,
-                frame_mm,
+                top_mesh_thickness_mm,
                 (
-                    length_mm / 2.0 - frame_mm / 2.0,
+                    length_mm / 2.0
+                    - top_mesh_member_mm / 2.0,
                     0.0,
-                    top_z,
+                    plan_z,
                 ),
             )
         )
 
-        # Interior cross ribs.
+        # ----------------------------------------------------
+        # PLAN-VIEW CROSS RIBS
         #
-        # These run front-to-back, so they are clearly visible from
-        # strict top orthographic view.
-        usable_length = length_mm - 2.0 * frame_mm
+        # Fewer, thicker ribs create larger cells that remain
+        # readable when the entire 16 x 20 field is rendered.
+        # ----------------------------------------------------
 
-        rib_width = min(
-            top_mesh_member_mm,
-            usable_length / (top_mesh_openings * 2.0),
+        usable_length = (
+            length_mm
+            - 2.0 * top_mesh_member_mm
         )
 
         for i in range(1, top_mesh_openings):
@@ -376,36 +400,51 @@ def build_net_mesh(
 
             meshes.append(
                 _box(
-                    rib_width,
+                    top_mesh_member_mm,
                     depth_mm,
-                    frame_mm,
+                    top_mesh_thickness_mm,
                     (
                         x,
                         0.0,
-                        top_z,
+                        plan_z,
+                    ),
+                )
+        )
+
+        # ----------------------------------------------------
+        # TWO LONGITUDINAL MEMBERS
+        #
+        # Instead of one tiny center member, use two separated
+        # strands. From above this produces a recognizable
+        # rectangular mesh rather than a ladder silhouette.
+        # ----------------------------------------------------
+
+        inner_depth = (
+            depth_mm
+            - 2.0 * edge_depth
+        )
+
+        longitudinal_offset = (
+            inner_depth * 0.28
+        )
+
+        for y in (
+            -longitudinal_offset,
+            longitudinal_offset,
+        ):
+
+            meshes.append(
+                _box(
+                    usable_length,
+                    top_mesh_member_mm,
+                    top_mesh_thickness_mm,
+                    (
+                        0.0,
+                        y,
+                        plan_z,
                     ),
                 )
             )
-
-        # One longitudinal center member adds a second direction to
-        # the plan pattern, making the top read unmistakably as mesh.
-        center_member_depth = min(
-            top_mesh_member_mm,
-            depth_mm * 0.22,
-        )
-
-        meshes.append(
-            _box(
-                usable_length,
-                center_member_depth,
-                frame_mm,
-                (
-                    0.0,
-                    0.0,
-                    top_z,
-                ),
-            )
-        )
 
     # --------------------------------------------------------
     # VERTICAL NET / LEVEL-VIEW LATTICE

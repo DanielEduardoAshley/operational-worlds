@@ -1,0 +1,366 @@
+#!/usr/bin/env python3
+
+"""FIELD-0005 Nested Zones — inward-band study.
+
+IMPORTANT:
+
+The INNER zone is LOCKED.
+
+Only the OUTER and MIDDLE zones move inward.
+
+Architecture width is also locked at:
+
+    0.750 in / 19.05 mm
+
+This study does not modify the canonical builder.
+"""
+
+from dataclasses import dataclass
+from pathlib import Path
+
+
+INCH_MM = 25.4
+
+ROOT = Path(__file__).resolve().parents[1]
+
+EXPORT_ROOT = (
+    ROOT
+    / "exports"
+    / "fabrication"
+    / "FIELD-0005_InwardBandStudy"
+)
+
+
+# ============================================================
+# FIELD
+# ============================================================
+
+FIELD_WIDTH_MM = 16.0 * INCH_MM
+FIELD_HEIGHT_MM = 20.0 * INCH_MM
+
+
+# ============================================================
+# LOCKED ARCHITECTURE WIDTH
+# ============================================================
+
+LINE_WIDTH_MM = 0.750 * INCH_MM
+
+
+# ============================================================
+# LOCKED INNER ZONE
+# ============================================================
+
+INNER_WIDTH_MM = 115.0
+INNER_HEIGHT_MM = 145.0
+INNER_OFFSET_Y_MM = -28.0
+
+
+@dataclass(frozen=True)
+class Variant:
+
+    slug: str
+    label: str
+
+    outer_width_mm: float
+    outer_height_mm: float
+
+    middle_width_mm: float
+    middle_height_mm: float
+
+
+# ============================================================
+# VARIANTS
+#
+# Notice that INNER dimensions are NOT parameters here.
+#
+# This makes it impossible for an individual variant to
+# accidentally resize the inner zone.
+# ============================================================
+
+VARIANTS = (
+
+    # --------------------------------------------------------
+    # A — original
+    # --------------------------------------------------------
+
+    Variant(
+        slug="A_CANONICAL",
+        label="A — Original",
+
+        outer_width_mm=345.0,
+        outer_height_mm=435.0,
+
+        middle_width_mm=245.0,
+        middle_height_mm=325.0,
+    ),
+
+
+    # --------------------------------------------------------
+    # A2 — first inward refinement
+    # --------------------------------------------------------
+
+    Variant(
+        slug="A2_INWARD",
+        label="A2 — Inward",
+
+        outer_width_mm=325.0,
+        outer_height_mm=415.0,
+
+        middle_width_mm=225.0,
+        middle_height_mm=295.0,
+    ),
+
+
+    # --------------------------------------------------------
+    # A3 — stronger inward movement
+    #
+    # Inner remains completely unchanged.
+    # --------------------------------------------------------
+
+    Variant(
+        slug="A3_INWARD_MORE",
+        label="A3 — Inward More",
+
+        outer_width_mm=315.0,
+        outer_height_mm=405.0,
+
+        middle_width_mm=205.0,
+        middle_height_mm=275.0,
+    ),
+)
+
+
+def fmt(value: float) -> str:
+    return f"{value:.3f}".rstrip("0").rstrip(".")
+
+
+def rect_segments(
+    width_mm,
+    height_mm,
+    center_y_mm=0.0,
+):
+
+    left = -width_mm / 2.0
+    right = width_mm / 2.0
+
+    bottom = center_y_mm - height_mm / 2.0
+    top = center_y_mm + height_mm / 2.0
+
+    return (
+        (left, bottom, right, bottom),
+        (right, bottom, right, top),
+        (right, top, left, top),
+        (left, top, left, bottom),
+    )
+
+
+def make_svg(variant):
+
+    width = FIELD_WIDTH_MM
+    height = FIELD_HEIGHT_MM
+
+    def sx(x):
+        return x + width / 2.0
+
+    def sy(y):
+        return height / 2.0 - y
+
+    segments = []
+
+    # OUTER — variable
+    segments.extend(
+        rect_segments(
+            variant.outer_width_mm,
+            variant.outer_height_mm,
+        )
+    )
+
+    # MIDDLE — variable
+    segments.extend(
+        rect_segments(
+            variant.middle_width_mm,
+            variant.middle_height_mm,
+        )
+    )
+
+    # INNER — LOCKED
+    segments.extend(
+        rect_segments(
+            INNER_WIDTH_MM,
+            INNER_HEIGHT_MM,
+            INNER_OFFSET_Y_MM,
+        )
+    )
+
+    svg_lines = []
+
+    for x1, y1, x2, y2 in segments:
+
+        svg_lines.append(
+            f'''    <line
+        x1="{fmt(sx(x1))}"
+        y1="{fmt(sy(y1))}"
+        x2="{fmt(sx(x2))}"
+        y2="{fmt(sy(y2))}"
+        stroke="#F2EBDD"
+        stroke-width="{fmt(LINE_WIDTH_MM)}"
+        stroke-linecap="square"
+        stroke-linejoin="miter"
+    />'''
+        )
+
+    geometry = "\n".join(svg_lines)
+
+    return f'''<?xml version="1.0" encoding="UTF-8"?>
+
+<svg
+    xmlns="http://www.w3.org/2000/svg"
+    width="{fmt(width)}mm"
+    height="{fmt(height)}mm"
+    viewBox="0 0 {fmt(width)} {fmt(height)}"
+>
+
+<title>
+FIELD-0005 Nested Zones — {variant.label}
+</title>
+
+<!-- FIELD -->
+
+<rect
+    x="0"
+    y="0"
+    width="{fmt(width)}"
+    height="{fmt(height)}"
+    fill="#062D20"
+/>
+
+
+<!-- ARCHITECTURE -->
+
+<g>
+
+{geometry}
+
+</g>
+
+</svg>
+'''
+
+
+def make_report(variant):
+
+    return f"""FIELD-0005 NESTED ZONES
+INWARD-BAND STUDY
+
+VARIANT
+-------
+{variant.label}
+
+
+FIELD
+-----
+406.4 x 508.0 mm
+16 x 20 in
+
+
+ARCHITECTURE WIDTH
+------------------
+19.05 mm
+0.750 in
+
+LOCKED
+
+
+OUTER
+-----
+{variant.outer_width_mm:.3f} x
+{variant.outer_height_mm:.3f} mm
+
+
+MIDDLE
+------
+{variant.middle_width_mm:.3f} x
+{variant.middle_height_mm:.3f} mm
+
+
+INNER
+-----
+{INNER_WIDTH_MM:.3f} x
+{INNER_HEIGHT_MM:.3f} mm
+
+Y offset:
+{INNER_OFFSET_Y_MM:.3f} mm
+
+INNER GEOMETRY IS LOCKED.
+
+
+PURPOSE
+-------
+Only the outer and middle architectural bands
+change between variants.
+
+The inner zone remains identical in size,
+position, and line width.
+"""
+
+
+def main():
+
+    EXPORT_ROOT.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    print()
+    print("FIELD-0005 INWARD-BAND STUDY")
+    print()
+
+    print(
+        "LOCKED INNER:"
+        f" {INNER_WIDTH_MM:.0f}"
+        " x"
+        f" {INNER_HEIGHT_MM:.0f}"
+        " mm"
+    )
+
+    print(
+        "LOCKED WIDTH:"
+        f" {LINE_WIDTH_MM:.2f} mm"
+        " / 0.750 in"
+    )
+
+    print()
+
+    for variant in VARIANTS:
+
+        prefix = (
+            "FIELD-0005_"
+            "16x20_075in_"
+            f"{variant.slug}"
+        )
+
+        svg = EXPORT_ROOT / f"{prefix}.svg"
+
+        report = (
+            EXPORT_ROOT
+            / f"{prefix}_PARAMS.txt"
+        )
+
+        svg.write_text(
+            make_svg(variant),
+            encoding="utf-8",
+        )
+
+        report.write_text(
+            make_report(variant),
+            encoding="utf-8",
+        )
+
+        print(
+            f"{variant.label}: "
+            f"{svg.relative_to(ROOT)}"
+        )
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,66 @@
+OPERATIONAL WORLDS
+FIELD-0004 DIVERGENCE
+
+36 x 36 FINAL WIDTH STUDY
+
+
+FIELD
+-----
+36 x 36 in
+
+914.400 x
+914.400 mm
+
+
+ARCHITECTURE WIDTH
+------------------
+1.000 in
+
+25.400 mm
+
+
+PROPOSED RELIEF HEIGHT
+----------------------
+0.750 in
+
+19.050 mm
+
+
+WIDTH / FIELD WIDTH
+-------------------
+2.778%
+
+
+LOCKED PARAMETERS
+-----------------
+Stem centerline separation:
+
+2.500 in
+63.500 mm
+
+
+Branch angle:
+
+32 degrees
+
+
+Split Y:
+
+0 mm
+
+
+GEOMETRY
+--------
+Continuous mitered architecture.
+
+No overlap at junction.
+
+No gap at junction.
+
+
+PURPOSE
+-------
+Final width calibration for 36 x 36 field.
+
+Only member width changes between the
+two variants.

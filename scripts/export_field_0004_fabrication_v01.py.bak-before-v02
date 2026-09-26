@@ -1,0 +1,701 @@
+#!/usr/bin/env python3
+"""FIELD-0004 Divergence — Fabrication v0.1.
+
+Generates fabrication-preview SVGs at:
+
+    16 x 20 in
+    18 x 24 in
+    36 x 36 in
+    40 x 40 in
+
+FABRICATION ARCHITECTURE
+
+    width  = 0.750 in / 19.05 mm
+    height = 0.750 in / 19.05 mm
+
+FIELD-0004 operational parameters retained:
+
+    stem width   = 2.500 in / 63.50 mm
+    branch angle = 32 degrees
+    split Y      = 0
+
+IMPORTANT
+
+The architecture is rendered as filled geometric polygons rather than
+independent SVG strokes.
+
+The vertical stems deliberately overlap the diagonal branches at the
+split. This eliminates the triangular gaps produced by butt-ended SVG
+strokes and gives us continuous physical architecture.
+
+This script does NOT modify the canonical FIELD-0004 builder.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from math import cos, radians, sin
+from pathlib import Path
+
+
+# ============================================================
+# CONSTANTS
+# ============================================================
+
+INCH_MM = 25.4
+
+ROOT = Path(__file__).resolve().parents[1]
+
+EXPORT_ROOT = (
+    ROOT
+    / "exports"
+    / "fabrication"
+    / "FIELD-0004_Divergence_FAB_v01"
+)
+
+
+# ------------------------------------------------------------
+# FABRICATION MEMBER
+# ------------------------------------------------------------
+
+ARCHITECTURE_WIDTH_MM = 0.750 * INCH_MM
+ARCHITECTURE_HEIGHT_MM = 0.750 * INCH_MM
+
+
+# ------------------------------------------------------------
+# FIELD-0004 OPERATIONAL PARAMETERS
+# ------------------------------------------------------------
+
+STEM_WIDTH_MM = 2.500 * INCH_MM
+BRANCH_ANGLE_DEG = 32.0
+SPLIT_Y_MM = 0.0
+
+
+# ------------------------------------------------------------
+# VISUAL MATERIAL REFERENCES
+# ------------------------------------------------------------
+
+FIELD_COLOR = "#062D20"
+ARCHITECTURE_COLOR = "#F2EBDD"
+
+
+# ============================================================
+# PANEL SIZES
+# ============================================================
+
+@dataclass(frozen=True)
+class Panel:
+    slug: str
+    width_in: float
+    height_in: float
+
+    @property
+    def width_mm(self) -> float:
+        return self.width_in * INCH_MM
+
+    @property
+    def height_mm(self) -> float:
+        return self.height_in * INCH_MM
+
+
+PANELS = (
+
+    Panel(
+        slug="16x20",
+        width_in=16.0,
+        height_in=20.0,
+    ),
+
+    Panel(
+        slug="18x24",
+        width_in=18.0,
+        height_in=24.0,
+    ),
+
+    Panel(
+        slug="36x36",
+        width_in=36.0,
+        height_in=36.0,
+    ),
+
+    Panel(
+        slug="40x40",
+        width_in=40.0,
+        height_in=40.0,
+    ),
+)
+
+
+# ============================================================
+# HELPERS
+# ============================================================
+
+def fmt(value: float) -> str:
+    return f"{value:.4f}".rstrip("0").rstrip(".")
+
+
+def svg_point(
+    x: float,
+    y: float,
+    field_width: float,
+    field_height: float,
+):
+    """Convert centered Cartesian coordinates to SVG coordinates."""
+
+    return (
+        x + field_width / 2.0,
+        field_height / 2.0 - y,
+    )
+
+
+def polygon_points_string(
+    points,
+    field_width,
+    field_height,
+):
+    result = []
+
+    for x, y in points:
+
+        sx, sy = svg_point(
+            x,
+            y,
+            field_width,
+            field_height,
+        )
+
+        result.append(
+            f"{fmt(sx)},{fmt(sy)}"
+        )
+
+    return " ".join(result)
+
+
+# ============================================================
+# GEOMETRY
+# ============================================================
+
+def rectangle_polygon(
+    center_x,
+    bottom_y,
+    top_y,
+    width,
+):
+    """Vertical rectangular architectural member."""
+
+    half = width / 2.0
+
+    return (
+        (center_x - half, bottom_y),
+        (center_x + half, bottom_y),
+        (center_x + half, top_y),
+        (center_x - half, top_y),
+    )
+
+
+def thick_segment_polygon(
+    x1,
+    y1,
+    x2,
+    y2,
+    width,
+    extension_start=0.0,
+    extension_end=0.0,
+):
+    """Create a filled polygon around a centerline segment.
+
+    extension_start and extension_end extend the centerline before
+    calculating the polygon.
+
+    We use a small start extension at the Divergence split so the
+    diagonal architecture overlaps the vertical stems.
+
+    That makes the Y transition physically continuous.
+    """
+
+    dx = x2 - x1
+    dy = y2 - y1
+
+    length = (dx * dx + dy * dy) ** 0.5
+
+    if length <= 0:
+        raise ValueError("segment must have non-zero length")
+
+    ux = dx / length
+    uy = dy / length
+
+    # Extend centerline.
+    sx = x1 - ux * extension_start
+    sy = y1 - uy * extension_start
+
+    ex = x2 + ux * extension_end
+    ey = y2 + uy * extension_end
+
+    # Perpendicular vector.
+    px = -uy
+    py = ux
+
+    half = width / 2.0
+
+    return (
+        (
+            sx + px * half,
+            sy + py * half,
+        ),
+        (
+            ex + px * half,
+            ey + py * half,
+        ),
+        (
+            ex - px * half,
+            ey - py * half,
+        ),
+        (
+            sx - px * half,
+            sy - py * half,
+        ),
+    )
+
+
+def build_geometry(panel: Panel):
+
+    width = panel.width_mm
+    height = panel.height_mm
+
+    bottom_y = -height / 2.0
+    top_y = height / 2.0
+
+    half_stem = STEM_WIDTH_MM / 2.0
+
+    left_x = -half_stem
+    right_x = half_stem
+
+    angle = radians(BRANCH_ANGLE_DEG)
+
+    # --------------------------------------------------------
+    # BRANCH CENTERLINES
+    #
+    # Preserve FIELD-0004's 32-degree branch behavior.
+    #
+    # Extend above the field so the architecture is clipped
+    # cleanly at the field boundary.
+    # --------------------------------------------------------
+
+    overshoot_y = ARCHITECTURE_WIDTH_MM * 2.0
+
+    branch_top_y = (
+        top_y
+        + overshoot_y
+    )
+
+    vertical_run = (
+        branch_top_y
+        - SPLIT_Y_MM
+    )
+
+    horizontal_run = (
+        sin(angle)
+        / cos(angle)
+        * vertical_run
+    )
+
+    left_top_x = (
+        left_x
+        - horizontal_run
+    )
+
+    right_top_x = (
+        right_x
+        + horizontal_run
+    )
+
+
+    # --------------------------------------------------------
+    # JOIN OVERLAP
+    #
+    # This is intentionally larger than zero.
+    #
+    # The vertical stem continues slightly ABOVE the split.
+    # The diagonal branch extends slightly BELOW the split.
+    #
+    # The two filled polygons therefore overlap.
+    #
+    # No triangular green notch can exist between them.
+    # --------------------------------------------------------
+
+    join_overlap = (
+        ARCHITECTURE_WIDTH_MM
+        * 1.25
+    )
+
+
+    # --------------------------------------------------------
+    # STEMS
+    # --------------------------------------------------------
+
+    left_stem = rectangle_polygon(
+        center_x=left_x,
+        bottom_y=bottom_y,
+        top_y=SPLIT_Y_MM + join_overlap,
+        width=ARCHITECTURE_WIDTH_MM,
+    )
+
+    right_stem = rectangle_polygon(
+        center_x=right_x,
+        bottom_y=bottom_y,
+        top_y=SPLIT_Y_MM + join_overlap,
+        width=ARCHITECTURE_WIDTH_MM,
+    )
+
+
+    # --------------------------------------------------------
+    # BRANCHES
+    # --------------------------------------------------------
+
+    left_branch = thick_segment_polygon(
+        x1=left_x,
+        y1=SPLIT_Y_MM,
+        x2=left_top_x,
+        y2=branch_top_y,
+        width=ARCHITECTURE_WIDTH_MM,
+        extension_start=join_overlap,
+        extension_end=ARCHITECTURE_WIDTH_MM,
+    )
+
+    right_branch = thick_segment_polygon(
+        x1=right_x,
+        y1=SPLIT_Y_MM,
+        x2=right_top_x,
+        y2=branch_top_y,
+        width=ARCHITECTURE_WIDTH_MM,
+        extension_start=join_overlap,
+        extension_end=ARCHITECTURE_WIDTH_MM,
+    )
+
+
+    return (
+        left_stem,
+        right_stem,
+        left_branch,
+        right_branch,
+    )
+
+
+# ============================================================
+# SVG
+# ============================================================
+
+def make_svg(panel: Panel) -> str:
+
+    width = panel.width_mm
+    height = panel.height_mm
+
+    polygons = build_geometry(panel)
+
+    polygon_svg = []
+
+    for points in polygons:
+
+        p = polygon_points_string(
+            points,
+            width,
+            height,
+        )
+
+        polygon_svg.append(
+            f'''    <polygon
+        points="{p}"
+        fill="{ARCHITECTURE_COLOR}"
+    />'''
+        )
+
+    architecture = "\n".join(
+        polygon_svg
+    )
+
+    return f'''<?xml version="1.0" encoding="UTF-8"?>
+
+<svg
+    xmlns="http://www.w3.org/2000/svg"
+    width="{fmt(width)}mm"
+    height="{fmt(height)}mm"
+    viewBox="0 0 {fmt(width)} {fmt(height)}"
+>
+
+<title>
+FIELD-0004 Divergence
+{panel.width_in:g} x {panel.height_in:g} in
+Fabrication v0.1
+</title>
+
+
+<!-- ======================================================
+     FIELD
+     ====================================================== -->
+
+<rect
+    x="0"
+    y="0"
+    width="{fmt(width)}"
+    height="{fmt(height)}"
+    fill="{FIELD_COLOR}"
+/>
+
+
+<!-- ======================================================
+     CLIP ARCHITECTURE TO PHYSICAL PANEL
+     ====================================================== -->
+
+<defs>
+
+    <clipPath id="fieldClip">
+
+        <rect
+            x="0"
+            y="0"
+            width="{fmt(width)}"
+            height="{fmt(height)}"
+        />
+
+    </clipPath>
+
+</defs>
+
+
+<!-- ======================================================
+     CONTINUOUS ARCHITECTURE
+     ====================================================== -->
+
+<g clip-path="url(#fieldClip)">
+
+{architecture}
+
+</g>
+
+
+</svg>
+'''
+
+
+# ============================================================
+# SPEC REPORT
+# ============================================================
+
+def make_report(panel: Panel) -> str:
+
+    return f"""OPERATIONAL WORLDS
+FIELD-0004 DIVERGENCE
+FABRICATION v0.1
+
+
+PANEL
+-----
+{panel.width_in:g} x {panel.height_in:g} in
+
+{panel.width_mm:.3f} x
+{panel.height_mm:.3f} mm
+
+
+ARCHITECTURE
+------------
+Width:
+
+{ARCHITECTURE_WIDTH_MM:.3f} mm
+0.750 in
+
+
+Proposed relief height:
+
+{ARCHITECTURE_HEIGHT_MM:.3f} mm
+0.750 in
+
+
+OPERATIONAL PARAMETERS
+----------------------
+Stem width:
+
+{STEM_WIDTH_MM:.3f} mm
+2.500 in
+
+
+Branch angle:
+
+{BRANCH_ANGLE_DEG:.3f} degrees
+
+
+Split Y:
+
+{SPLIT_Y_MM:.3f} mm
+
+
+GEOMETRY
+--------
+Architecture is represented as filled polygons.
+
+Stem and branch polygons intentionally overlap
+at the Divergence junction.
+
+Final fabrication geometry should be Boolean
+unioned into continuous closed architecture
+before CNC / machining export.
+
+
+FINISH INTENT
+-------------
+FIELD:
+
+Dark green.
+Smooth matte sprayed finish.
+
+Field finish continues across:
+- top field surface
+- left exterior side
+- right exterior side
+- top exterior side
+- bottom exterior side
+
+
+ARCHITECTURE:
+
+Warm white.
+Smooth matte sprayed finish.
+
+
+BACK:
+
+May remain unfinished unless required for
+dimensional stability.
+
+Back should remain flat and suitable for mounting.
+
+
+VISIBLE FABRICATION:
+
+No exposed raw substrate.
+
+No visible fasteners.
+
+No adhesive squeeze-out.
+
+No unfinished seams when viewed from the
+front or exterior sides.
+
+
+QUOTE REQUEST
+-------------
+Please quote separately:
+
+A.
+Raw / unfinished fabrication.
+
+B.
+Fabrication plus professional sprayed finish.
+
+Please recommend material / construction for:
+
+1.
+Economical prototype fabrication.
+
+2.
+Durable gallery-quality fabrication.
+
+
+STATUS
+------
+FABRICATION STUDY v0.1
+
+Not yet final CNC geometry.
+"""
+
+
+# ============================================================
+# EXPORT
+# ============================================================
+
+def main():
+
+    EXPORT_ROOT.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    print()
+    print(
+        "FIELD-0004 DIVERGENCE"
+    )
+
+    print(
+        "FABRICATION v0.1"
+    )
+
+    print()
+
+    print(
+        "Architecture:"
+        f" {ARCHITECTURE_WIDTH_MM:.2f}"
+        " mm wide x"
+        f" {ARCHITECTURE_HEIGHT_MM:.2f}"
+        " mm high"
+    )
+
+    print()
+
+    for panel in PANELS:
+
+        folder = (
+            EXPORT_ROOT
+            / panel.slug
+        )
+
+        folder.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
+        prefix = (
+            "FIELD-0004_Divergence_"
+            f"{panel.slug}_FAB_v01"
+        )
+
+        svg_path = (
+            folder
+            / f"{prefix}.svg"
+        )
+
+        spec_path = (
+            folder
+            / f"{prefix}_SPEC.txt"
+        )
+
+        svg_path.write_text(
+            make_svg(panel),
+            encoding="utf-8",
+        )
+
+        spec_path.write_text(
+            make_report(panel),
+            encoding="utf-8",
+        )
+
+        print(
+            f"{panel.width_in:g}"
+            " x "
+            f"{panel.height_in:g}"
+            " in"
+        )
+
+        print(
+            "  SVG: "
+            f"{svg_path.relative_to(ROOT)}"
+        )
+
+        print(
+            "  SPEC: "
+            f"{spec_path.relative_to(ROOT)}"
+        )
+
+        print()
+
+
+if __name__ == "__main__":
+    main()

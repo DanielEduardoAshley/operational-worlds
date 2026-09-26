@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<svg
+    xmlns="http://www.w3.org/2000/svg"
+    width="406.4mm"
+    height="508mm"
+    viewBox="0 0 406.4 508"
+>
+
+<title>
+FIELD-0004 Divergence
+16 x 20 in
+Fabrication v0.2
+</title>
+
+
+<defs>
+
+    <clipPath id="fieldClip">
+
+        <rect
+            x="0"
+            y="0"
+            width="406.4"
+            height="508"
+        />
+
+    </clipPath>
+
+</defs>
+
+
+<!-- FIELD -->
+
+<rect
+    x="0"
+    y="0"
+    width="406.4"
+    height="508"
+    fill="#062D20"
+/>
+
+
+<!--
+    ARCHITECTURE
+
+    Two continuous closed polygons.
+
+    Each polygon contains its own stem + diagonal branch.
+    No overlapping geometry exists at the bend.
+-->
+
+<g clip-path="url(#fieldClip)">
+
+    <polygon
+        points="161.925,508 161.925,256.7312 -31.0558,-52.1025 -14.9004,-62.1975 180.975,251.2688 180.975,508"
+        fill="#F2EBDD"
+    />
+
+    <polygon
+        points="225.425,508 225.425,251.2688 421.3004,-62.1975 437.4558,-52.1025 244.475,256.7312 244.475,508"
+        fill="#F2EBDD"
+    />
+
+</g>
+
+
+</svg>

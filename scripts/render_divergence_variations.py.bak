@@ -1,0 +1,312 @@
+import bpy
+import sys
+from pathlib import Path
+from mathutils import Vector
+
+# ------------------------------------------------------------
+# OWDE — Divergence Variation Critique Export
+#
+# Exports:
+#   01_Divergence_Wide.png
+#   02_Divergence_Medium.png
+#   03_Divergence_Near_Zero.png
+#
+# The three source objects are sorted LEFT -> RIGHT according
+# to their current Blender world position.
+# ------------------------------------------------------------
+
+OBJECT_NAMES = [
+    "FIELD-0004_Divergence.001",
+    "FIELD-0004_Divergence.002",
+    "FIELD-0004_Divergence.007",
+]
+
+OUTPUT_NAMES = [
+    "01_Divergence_Wide.png",
+    "02_Divergence_Medium.png",
+    "03_Divergence_Near_Zero.png",
+]
+
+RESOLUTION_X = 1600
+RESOLUTION_Y = 2000
+
+# Small amount of breathing room around the field.
+FRAME_MARGIN = 1.04
+
+OUTPUT_DIR = (
+    Path.cwd()
+    / "exports"
+    / "critique"
+    / "03_divergence_variations"
+)
+
+OUTPUT_DIR.mkdir(parents=True, exist_=True)
+
+
+# ------------------------------------------------------------
+# Helpers
+# ------------------------------------------------------------
+
+def world_bbox(obj):
+    return [
+        obj.matrix_world @ Vector(corner)
+        for corner in obj.bound_box
+    ]
+
+
+def bbox_center(obj):
+    pts = world_bbox(obj)
+
+    min_x = min(p.x for p in pts)
+    max_x = max(p.x for p in pts)
+
+    min_y = min(p.y for p in pts)
+    max_y = max(p.y for p in pts)
+
+    min_z = min(p.z for p in pts)
+    max_z = max(p.z for p in pts)
+
+    return Vector((
+        (min_x + max_x) / 2.0,
+        (min_y + max_y) / 2.0,
+        (min_z + max_z) / 2.0,
+    ))
+
+
+def bbox_size(obj):
+    pts = world_bbox(obj)
+
+    min_x = min(p.x for p in pts)
+    max_x = max(p.x for p in pts)
+
+    min_y = min(p.y for p in pts)
+    max_y = max(p.y for p in pts)
+
+    min_z = min(p.z for p in pts)
+    max_z = max(p.z for p in pts)
+
+    return (
+        max_x - min_x,
+        max_y - min_y,
+        max_z - min_z,
+    )
+
+
+def ensure_camera():
+    camera = bpy.data.objects.get("OWDE_CRITIQUE_CAMERA")
+
+    if camera is None:
+        camera_data = bpy.data.cameras.new(
+            "OWDE_CRITIQUE_CAMERA_DATA"
+        )
+
+        camera = bpy.data.objects.new(
+            "OWDE_CRITIQUE_CAMERA",
+            camera_data,
+        )
+
+        bpy.context.scene.collection.objects.link(camera)
+
+    camera.data.type = "ORTHO"
+
+    return camera
+
+
+def configure_world():
+    world = bpy.context.scene.world
+
+    if world is None:
+        world = bpy.data.worlds.new("OWDE_CRITIQUE_WORLD")
+        bpy.context.scene.world = world
+
+    world.use_nodes = True
+
+    nodes = world.node_tree.nodes
+
+    background = nodes.get("Background")
+
+    if background is not None:
+        # Neutral world illumination.
+        background.inputs["Color"].default_value = (
+            0.80,
+            0.80,
+            0.80,
+            1.0,
+        )
+
+        background.inputs["Strength"].default_value = 0.35
+
+
+def disable_scene_lights():
+    for obj in bpy.context.scene.objects:
+        if obj.type == "LIGHT":
+            obj.hide_render = True
+
+
+def configure_render():
+    scene = bpy.context.scene
+
+    scene.render.resolution_x = RESOLUTION_X
+    scene.render.resolution_y = RESOLUTION_Y
+    scene.render.resolution_percentage = 100
+
+    scene.render.image_settings.file_format = "PNG"
+    scene.render.image_settings.color_mode = "RGBA"
+
+    # Transparent background disabled so the render retains
+    # the neutral world/background presentation.
+    scene.render.film_transparent = False
+
+
+def hide_all_except(target, camera):
+    for obj in bpy.context.scene.objects:
+
+        if obj == target:
+            obj.hide_render = False
+            continue
+
+        if obj == camera:
+            obj.hide_render = False
+            continue
+
+        # Lights are intentionally disabled separately.
+        if obj.type == "LIGHT":
+            obj.hide_render = True
+            continue
+
+        obj.hide_render = True
+
+
+def frame_object(camera, obj):
+    center = bbox_center(obj)
+    width, height, depth = bbox_size(obj)
+
+    # FIELD objects are portrait 16 × 20.
+    #
+    # ortho_scale represents vertical camera coverage.
+    # We calculate the scale from both dimensions so the same
+    # framing works even if a future field proportion changes.
+    render_aspect = RESOLUTION_X / RESOLUTION_Y
+
+    vertical_from_height = height
+    vertical_from_width = width / render_aspect
+
+    camera.data.ortho_scale = (
+        max(
+            vertical_from_height,
+            vertical_from_width,
+        )
+
+◦ FRAME_MARGIN.
+    )
+
+    # Orthographic top-down camera.
+    camera.location = (
+        center.x,
+        center.y,
+        center.z + 2.0,
+    )
+
+    camera.rotation_euler = (
+        0.0,
+        0.0,
+        0.0,
+    )
+
+    # Blender cameras look down local -Z.
+    camera.rotation_euler[0] = 0.0
+
+    bpy.context.scene.camera = camera
+
+
+# ------------------------------------------------------------
+# Resolve source objects
+# ------------------------------------------------------------
+
+objects = []
+
+for name in OBT_NAMES:
+    obj = bpy.data.objects.get(name)
+
+    if obj is None:
+        raise RuntimeError(
+            f"Could not find Blender object: {name}"
+        )
+
+    objects.append(obj)
+
+
+# Sort by their current Blender X position.
+#
+# Your three selected studies are arranged:
+#   wide -> medium -> near-zero
+#
+# from left to right in the scene.
+objects.sort(
+    key=lambda obj: bbox_center(obj).x
+)
+
+
+print("")
+print("Divergence export order:")
+print("------------------------")
+
+for index, obj in enumerate(objects):
+    print(
+        f"{index + 1:02d}: "
+        f"{obj.name} -> {OUTPUT_NAMES[index]}"
+    )
+
+print("")
+
+
+# ------------------------------------------------------------
+# Render
+# ------------------------------------------------------------
+
+camera = ensure_camera()
+
+configure_world()
+configure_render()
+disable_scene_lights()
+
+scene = bpy.context.scene
+
+
+for obj, output_name in zip(
+    objects,
+    OUTPUT_NAMES,
+):
+    hide_all_except(
+        obj,
+        camera,
+    )
+
+    frame_object(
+        camera,
+        obj,
+    )
+
+    output_path = OUTPUT_DIR / output_name
+
+    scene.render.filepath = str(output_path)
+
+    print(
+        f"Rendering {obj.name}"
+        f" -> {output_path}"
+    )
+
+    bpy.ops.render.render(
+        write_still=True
+    )
+
+
+print("")
+print("Done.")
+print("")
+print("Exports:")
+for filename in OUTPUT_NAMES:
+    print(
+        "  "
+        + str(OUTPUT_DIR / filename)
+    )

@@ -10,6 +10,7 @@ from owde_addon.core.competition_builders import (
     NET_DEPTH_MM,
     NET_HEIGHT_MM,
     NET_LENGTH_MM,
+    NET_TOP_MESH_THICKNESS_MM,
     build_actor_mesh,
     build_gate_mesh,
     build_net_mesh,
@@ -49,7 +50,7 @@ def test_net_defaults():
     assert mesh_bounds(mesh) == pytest.approx((
         NET_LENGTH_MM,
         NET_DEPTH_MM,
-        NET_HEIGHT_MM,
+        NET_HEIGHT_MM + NET_TOP_MESH_THICKNESS_MM,
     ))
     assert len(mesh.vertices) > 0
     assert len(mesh.faces) > 0

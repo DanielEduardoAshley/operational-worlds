@@ -1,0 +1,94 @@
+FIELD-0004 DIVERGENCE
+FABRICATION QUOTE SPECIFICATION v0.1
+
+FIELD
+-----
+Overall size:
+  36 × 36 in
+  914.400 × 914.400 mm
+
+Architecture:
+  FIELD-0004 Divergence
+  Edge character: CLEAN
+
+CANONICAL OPERATIONAL PARAMETERS
+--------------------------------
+Architecture width:
+  12.700 mm
+  0.500 in
+
+Stem width:
+  63.500 mm
+  2.500 in
+
+Split Y:
+  0.000 mm
+
+Branch angle:
+  32.000 degrees
+
+PROPOSED FABRICATION PARAMETER
+------------------------------
+Raised architecture height:
+  19.050 mm
+  0.750 in
+
+FINISH
+------
+Field:
+  Dark green, smooth matte sprayed finish.
+  Finish continues across top field and all four exterior sides.
+
+Raised architecture:
+  Warm white, smooth matte sprayed finish.
+
+Back:
+  May remain unfinished unless required for dimensional stability.
+  Keep flat and suitable for mounting.
+
+Visible surfaces:
+  No exposed raw substrate, visible fasteners,
+  adhesive squeeze-out, or unfinished seams
+  when viewed from front or sides.
+
+USE
+---
+Surface should tolerate repeated placement and manipulation
+of Operational Worlds physical primitives.
+
+CONSTRUCTION QUOTE
+------------------
+Please quote separately:
+
+A. Raw / unfinished fabrication.
+B. Fabrication plus professional sprayed finish.
+
+Please also identify recommended substrate/material and
+construction method for:
+
+1. economical prototype construction.
+2. durable gallery-quality construction.
+
+CANONICAL CENTERLINE GEOMETRY
+-----------------------------
+Coordinates are millimetres relative to field center.
++X = right
++Y = top
+
+  1: (-31.750, -457.200) -> (-31.750, 0.000), width=12.700 mm
+  2: (31.750, -457.200) -> (31.750, 0.000), width=12.700 mm
+  3: (-31.750, 0.000) -> (-333.312, 482.600), width=12.700 mm
+  4: (31.750, 0.000) -> (333.312, 482.600), width=12.700 mm
+
+NOTE
+----
+Geometry is generated directly from the canonical
+Operational Worlds FIELD-0004 builder.
+
+The architecture is clipped at the physical field boundary.
+The branch centerlines intentionally overshoot the field so
+the thick diagonal architecture terminates flush after clipping.
+
+The 36 × 36 and 40 × 40 versions are NOT stretch versions
+of the 16 × 20 field. They instantiate the same operational
+parameters within different field boundaries.

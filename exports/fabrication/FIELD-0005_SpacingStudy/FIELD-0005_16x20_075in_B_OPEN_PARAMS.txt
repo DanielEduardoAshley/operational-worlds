@@ -1,0 +1,42 @@
+FIELD-0005 SPACING STUDY
+
+Variant:
+B — Moderately opened
+
+Field:
+406.4 x 508.0 mm
+16 x 20 in
+
+Architecture width:
+19.050 mm
+0.750 in
+
+Outer:
+350.000 x
+440.000 mm
+
+Middle:
+230.000 x
+305.000 mm
+
+Inner:
+100.000 x
+130.000 mm
+
+Inner Y offset:
+-28.000 mm
+
+Approximate clear green spacing:
+
+Outer -> Middle horizontal:
+40.950 mm
+
+Outer -> Middle vertical:
+48.450 mm
+
+Middle -> Inner horizontal:
+45.950 mm
+
+NOTE:
+Exploratory fabrication study only.
+Canonical FIELD-0005 is unchanged.
