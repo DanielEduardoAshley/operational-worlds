@@ -3,6 +3,7 @@ import pytest
 from owde_addon.core.field_builders import (
     DEFAULT_FIELD_HEIGHT_MM,
     DEFAULT_FIELD_WIDTH_MM,
+    DEFAULT_LINE_WIDTH_MM,
     build_bottleneck_field,
     build_divergence_field,
     build_division_field,
@@ -92,8 +93,12 @@ def test_divergence_is_symmetric():
     assert right_stem.y1 == pytest.approx(-DEFAULT_FIELD_HEIGHT_MM / 2.0)
 
     assert left_branch.x2 == pytest.approx(-right_branch.x2)
-    assert left_branch.y2 == pytest.approx(DEFAULT_FIELD_HEIGHT_MM / 2.0)
-    assert right_branch.y2 == pytest.approx(DEFAULT_FIELD_HEIGHT_MM / 2.0)
+    assert left_branch.y2 == pytest.approx(
+        DEFAULT_FIELD_HEIGHT_MM / 2.0 + DEFAULT_LINE_WIDTH_MM * 2.0
+    )
+    assert right_branch.y2 == pytest.approx(
+        DEFAULT_FIELD_HEIGHT_MM / 2.0 + DEFAULT_LINE_WIDTH_MM * 2.0
+    )
 
 
 def test_default_field_is_portrait_20_by_16_inches():

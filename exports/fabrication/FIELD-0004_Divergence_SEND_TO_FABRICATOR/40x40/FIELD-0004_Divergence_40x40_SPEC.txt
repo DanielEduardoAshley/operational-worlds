@@ -1,0 +1,93 @@
+OPERATIONAL WORLDS
+FIELD-0004 — DIVERGENCE
+
+FABRICATION RFQ v0.1
+SIZE: 40 x 40 IN
+
+
+OVERALL PANEL
+=============
+
+Width:
+40.000 in
+1016.000 mm
+
+Height:
+40.000 in
+1016.000 mm
+
+
+RAISED ARCHITECTURE
+===================
+
+Member width:
+1.250 in
+31.750 mm
+
+Provisional relief height:
+0.750 in
+19.050 mm
+
+
+FIELD-0004 GEOMETRY
+===================
+
+Stem centerline separation:
+2.500 in
+63.500 mm
+
+Branch angle:
+32.000 degrees
+
+Split position:
+Centered vertically
+
+Architecture consists of two
+continuous mitered members.
+
+Members terminate flush at the
+top and bottom field boundaries.
+
+
+FINISH
+======
+
+FIELD:
+Dark green, smooth matte sprayed finish.
+
+ARCHITECTURE:
+Warm white, smooth matte sprayed finish.
+
+VISIBLE OUTER PANEL SIDES:
+Continue dark-green field finish.
+
+BACK:
+May remain unfinished unless finishing
+is required for dimensional stability.
+
+
+FABRICATION QUALITY
+===================
+
+No exposed raw substrate on visible surfaces.
+
+No visible fasteners from normal frontal viewing.
+
+No visible adhesive squeeze-out.
+
+No visible seams in raised architecture from
+normal frontal viewing.
+
+Edges should be clean and suitable for
+gallery presentation.
+
+
+IMPORTANT
+=========
+
+The 0.750 in relief height is a proposed
+design dimension for quoting.
+
+Fabricator may recommend an alternative
+construction/material strategy that achieves
+the same visual depth and appearance.

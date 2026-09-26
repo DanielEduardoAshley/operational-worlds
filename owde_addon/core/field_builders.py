@@ -318,23 +318,38 @@ def build_divergence_field(
         raise ValueError("split position must remain inside field")
 
     angle = radians(branch_angle_deg)
-    vertical_run = top_y - split_y_mm
-    horizontal_run = sin(angle) / cos(angle) * vertical_run
 
     half_width = width_mm / 2.0
     half_stem = stem_width_mm / 2.0
+
     left_split_x = -half_stem
     right_split_x = half_stem
-    left_top_x = max(
-        -half_width,
-        left_split_x - horizontal_run,
-    )
-    right_top_x = min(
-        half_width,
-        right_split_x + horizontal_run,
-    )
+
+    # --------------------------------------------------------
+    # FLUSH-TOP FIX
+    #
+    # Extend each branch beyond the physical top edge.
+    # The Blender clipping stage then cuts the thick diagonal
+    # bands exactly at the field boundary.
+    #
+    # Extending the centerline is important because ending a
+    # thick diagonal exactly at top_y leaves its angled cap
+    # visually short of the top edge.
+    # --------------------------------------------------------
+
+    overshoot_y = line_width_mm * 2.0
+    branch_top_y = top_y + overshoot_y
+
+    vertical_run = branch_top_y - split_y_mm
+    horizontal_run = (
+        sin(angle) / cos(angle)
+    ) * vertical_run
+
+    left_top_x = left_split_x - horizontal_run
+    right_top_x = right_split_x + horizontal_run
 
     lines = (
+        # Left lower boundary.
         FieldLine(
             left_split_x,
             bottom_y,
@@ -342,6 +357,8 @@ def build_divergence_field(
             split_y_mm,
             line_width_mm,
         ),
+
+        # Right lower boundary.
         FieldLine(
             right_split_x,
             bottom_y,
@@ -349,18 +366,24 @@ def build_divergence_field(
             split_y_mm,
             line_width_mm,
         ),
+
+        # Left diverging branch.
+        # Deliberately continues beyond the top edge.
         FieldLine(
             left_split_x,
             split_y_mm,
             left_top_x,
-            top_y,
+            branch_top_y,
             line_width_mm,
         ),
+
+        # Right diverging branch.
+        # Deliberately continues beyond the top edge.
         FieldLine(
             right_split_x,
             split_y_mm,
             right_top_x,
-            top_y,
+            branch_top_y,
             line_width_mm,
         ),
     )
@@ -379,7 +402,6 @@ def build_divergence_field(
             "line_width_mm": line_width_mm,
         },
     )
-
 
 
 def build_nested_zones_field(
